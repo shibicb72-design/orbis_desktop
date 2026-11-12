@@ -17,9 +17,15 @@ firefox-update. Other issues with that label are never touched.
 status behind or stale:
   no open issue  -> create it (and the label, if missing);
   open issue     -> if the body changed, replace it and add one comment;
-                    otherwise do nothing (no daily noise).
+                    otherwise do nothing (no daily noise). With more than
+                    one open, only the oldest (lowest number) is updated.
 status current:
-  open issue     -> close it with a comment.
+  open issues    -> close each with a comment.
+
+All gh calls go through Invoke-Gh. The read calls (issue list, label list)
+always run and are parsed the same way; -DryRun only replaces the write calls
+(create, edit, comment, close) with a printed "DRY RUN: gh ..." line. -GhJson
+replaces the read calls with canned output, for tests.
 
 .PARAMETER ReportFile
 Report from check-firefox-currency.ps1 -ReportFile.
@@ -34,10 +40,17 @@ Link to the workflow run, used in comments.
 Date (yyyy-MM-dd) used to mark the deadline as passed. Default: today (UTC).
 
 .PARAMETER DryRun
-Print the title, body and planned action; call nothing.
+Read the open issues and labels with gh as usual, then print each write call
+(and the issue body) instead of running it. Needs gh and -Repository, unless
+-GhJson is given.
+
+.PARAMETER GhJson
+Test input: a JSON file whose properties "issue list" and "label list" hold
+the exact text gh would print for those calls. gh is then not called for
+reads. Use with -DryRun.
 
 .EXAMPLE
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync-currency-issue.ps1 -ReportFile report.json -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync-currency-issue.ps1 -ReportFile report.json -Repository owner/name -DryRun
 #>
 [CmdletBinding()]
 param(
@@ -45,7 +58,8 @@ param(
     [string]$Repository = $env:GITHUB_REPOSITORY,
     [string]$RunUrl = '',
     [string]$Today = '',
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$GhJson = ''
 )
 
 Set-StrictMode -Version 2.0
@@ -54,9 +68,25 @@ $ErrorActionPreference = 'Stop'
 $Title = 'Firefox pin is out of date'
 $Label = 'firefox-update'
 
+$script:GhStub = $null
+
 function Invoke-Gh {
     # Runs gh with the arguments as given and returns its stdout as one string; throws on a
     # non-zero exit code. No param() block, so "--repo" and the like reach gh unchanged.
+    # Reads come from -GhJson if given; writes are only printed under -DryRun.
+    $verb = "$($args[0]) $($args[1])"
+    $isRead = $verb -in @('issue list', 'label list')
+    if ($isRead -and $script:GhStub) {
+        $p = $script:GhStub.PSObject.Properties[$verb]
+        if (-not $p) { throw "-GhJson has no '$verb' entry" }
+        return [string]$p.Value
+    }
+    if (-not $isRead -and $DryRun) {
+        Write-Host ('DRY RUN: gh ' + ($args -join ' '))
+        $i = [array]::IndexOf($args, '--body-file')
+        if ($i -ge 0) { Write-Host ([IO.File]::ReadAllText($args[$i + 1])) }
+        return ''
+    }
     $out = & gh @args
     if ($LASTEXITCODE -ne 0) { throw "gh $($args[0]) $($args[1]) failed (exit $LASTEXITCODE)" }
     ($out | ForEach-Object { "$_" }) -join "`n"
@@ -103,16 +133,29 @@ function New-IssueBody {
     ($lines -join "`n")
 }
 
+function ConvertFrom-GhList ([string]$Json) {
+    # gh prints a JSON array. Emits its items one by one: nothing for "[]" or empty output, one
+    # item for a bare object. PowerShell unrolls what a function returns, so callers must wrap
+    # the result in @(...) before using .Count or [0]: without that, zero items is $null and
+    # one item is a scalar, and StrictMode throws on .Count.
+    if ([string]::IsNullOrWhiteSpace($Json)) { return }
+    $Json | ConvertFrom-Json | ForEach-Object { $_ }
+}
+
 function Get-OpenIssues {
     $json = Invoke-Gh issue list --repo $Repository --state open --label $Label --limit 100 --json 'number,title,body'
-    @($json | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.title -ceq $Title })
+    ConvertFrom-GhList $json | Where-Object { $_.title -ceq $Title } | Sort-Object { [int]$_.number }
 }
 
 try {
     [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
     $report = Get-Content -LiteralPath $ReportFile -Raw | ConvertFrom-Json
     if (-not $Today) { $Today = [datetime]::UtcNow.ToString('yyyy-MM-dd') }
-    if (-not $DryRun -and -not $Repository) { throw 'No repository: pass -Repository or set GITHUB_REPOSITORY.' }
+    if (-not $Repository) { throw 'No repository: pass -Repository or set GITHUB_REPOSITORY.' }
+    if ($GhJson) {
+        if (-not $DryRun) { throw '-GhJson is test input; use it with -DryRun.' }
+        $script:GhStub = Get-Content -LiteralPath $GhJson -Raw | ConvertFrom-Json
+    }
     $runNote = if ($RunUrl) { " Run: $RunUrl" } else { '' }
     # Windows PowerShell 5.1 does not escape embedded double quotes in native arguments.
     $runNote = $runNote -replace '"', "'"
@@ -120,8 +163,7 @@ try {
 
     switch ($report.status) {
         'current' {
-            if ($DryRun) { Write-Host "DRY RUN: would close any open '$Title' issue labelled $Label. $($report.message)"; break }
-            $open = Get-OpenIssues
+            $open = @(Get-OpenIssues)
             if ($open.Count -eq 0) { Write-Host 'Pin is current; no open issue.'; break }
             foreach ($issue in $open) {
                 $null = Invoke-Gh issue close $issue.number --repo $Repository --reason completed --comment ("The daily check passes: ``{0}``.{1}" -f $report.message, $runNote)
@@ -130,24 +172,22 @@ try {
         }
         { $_ -in @('behind', 'stale') } {
             $body = New-IssueBody -Report $report -Today $Today
-            if ($DryRun) {
-                Write-Host "DRY RUN: would create or update the issue '$Title' (label $Label):"
-                Write-Host $body
-                break
-            }
-            $open = Get-OpenIssues
+            $open = @(Get-OpenIssues)
             $bodyFile = Join-Path ([IO.Path]::GetTempPath()) ('firefox-currency-issue-' + [guid]::NewGuid().ToString('N') + '.md')
             [IO.File]::WriteAllText($bodyFile, $body, (New-Object Text.UTF8Encoding $false))
             try {
                 if ($open.Count -eq 0) {
                     $labels = Invoke-Gh label list --repo $Repository --search $Label --limit 100 --json name
-                    if (-not @($labels | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.name -ceq $Label }).Count) {
+                    if (@(ConvertFrom-GhList $labels | Where-Object { $_.name -ceq $Label }).Count -eq 0) {
                         $null = Invoke-Gh label create $Label --repo $Repository --color 'b60205' --description 'Pinned Firefox is behind Mozilla (opened by the daily currency check)'
                     }
                     $url = Invoke-Gh issue create --repo $Repository --title $Title --label $Label --body-file $bodyFile
-                    Write-Host "Opened $url"
+                    if ($DryRun) { Write-Host 'Would open the issue.' } else { Write-Host "Opened $url" }
                 } else {
                     $issue = $open[0]
+                    if ($open.Count -gt 1) {
+                        Write-Host ("{0} open '{1}' issues; updating the oldest, #{2}." -f $open.Count, $Title, $issue.number)
+                    }
                     $old = ([string]$issue.body) -replace "`r`n", "`n"
                     if ($old.Trim() -ceq $body.Trim()) {
                         Write-Host "Issue #$($issue.number) is already up to date."

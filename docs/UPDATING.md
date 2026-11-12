@@ -67,13 +67,16 @@ owner or watchers. Check the Actions tab, or change the `cron` line yourself, so
 GitHub runs scheduled workflows only from the default branch, and turns them off in a public repository after 60
 days without any commit. If that happens, the Actions tab shows a button to turn the workflow back on.
 
-Test the check and the issue text offline (local feed files, a throw-away git repository, no GitHub):
+Test the check and the issue sync offline (local feed files, a throw-away git repository, canned GitHub CLI
+output for 0, 1 and 2 open issues, no GitHub):
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-firefox-currency.ps1
 ```
 
-`scripts\sync-currency-issue.ps1 -ReportFile FILE -DryRun` prints the issue text for a report without calling GitHub.
+`scripts\sync-currency-issue.ps1 -ReportFile FILE -Repository OWNER/NAME -DryRun` reads the open issues and labels
+with `gh` (needs `gh auth login`) and prints each call that would change GitHub, with the issue text, instead of
+running it. `-GhJson FILE` replaces those reads with canned output; the test uses it.
 
 ## Move the pin to a new release
 
