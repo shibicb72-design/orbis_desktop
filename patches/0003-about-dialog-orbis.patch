@@ -1,0 +1,138 @@
+Orbis: About dialog says what Orbis is, without Mozilla's community and donation links.
+
+community-2 (and community-exp, shown on pre-release versions) said "Orbis is designed by Orbis, a global
+community ...", with the vendor name linked to mozilla.org and "global community" to about:credits. They
+now say "Orbis is built from Mozilla's Firefox source code and is not affiliated with Mozilla.", with no
+links. The "Want to help? Make a donation or get involved!" blurbs (helpus, helpus-referrals2; links to
+foundation.mozilla.org, mozilla.org/contribute and about:referrals) are removed, with the aboutDialog.js
+code that toggled them and the Referrals import. See docs/PATCHES.md.
+
+diff --git a/browser/base/content/aboutDialog.js b/browser/base/content/aboutDialog.js
+index 9ce7aa0..abb11bf 100644
+--- a/browser/base/content/aboutDialog.js
++++ b/browser/base/content/aboutDialog.js
+@@ -12,11 +12,6 @@ var { AppConstants } = ChromeUtils.importESModule(
+   "resource://gre/modules/AppConstants.sys.mjs"
+ );
+ 
+-const lazy = {};
+-ChromeUtils.defineESModuleGetters(lazy, {
+-  Referrals: "moz-src:///browser/components/referrals/Referrals.sys.mjs",
+-});
+-
+ if (AppConstants.MOZ_UPDATER) {
+   Services.scriptloader.loadSubScript(
+     "chrome://browser/content/aboutDialog-appUpdater.js",
+@@ -117,52 +112,6 @@ function init() {
+     }
+   }
+ 
+-  // contributeDescReferrals contains the Share Firefox link, so we
+-  // toggle which description based on the referrals config flag
+-  let referralsEnabled = Services.prefs.getBoolPref(
+-    "browser.referrals.enabled",
+-    false
+-  );
+-  document.getElementById("contributeDesc").hidden = referralsEnabled;
+-  let contributeDescReferrals = document.getElementById(
+-    "contributeDescReferrals"
+-  );
+-  contributeDescReferrals.hidden = !referralsEnabled;
+-
+-  // An element named directly by aria-describedby is still read out while it
+-  // is hidden, so the list has to name whichever blurb is shown. Rewrite
+-  // either id to the shown one so this holds whatever state we started from.
+-  let shownContributeDescId = referralsEnabled
+-    ? "contributeDescReferrals"
+-    : "contributeDesc";
+-  let describedBy = document.documentElement
+-    .getAttribute("aria-describedby")
+-    .split(" ")
+-    .map(id =>
+-      id == "contributeDesc" || id == "contributeDescReferrals"
+-        ? shownContributeDescId
+-        : id
+-    );
+-  document.documentElement.setAttribute(
+-    "aria-describedby",
+-    [...new Set(describedBy)].join(" ")
+-  );
+-
+-  if (referralsEnabled) {
+-    contributeDescReferrals.addEventListener(
+-      "click",
+-      event => {
+-        if (
+-          event.target.closest('[data-l10n-name="helpus-shareFirefoxLink"]')
+-        ) {
+-          event.preventDefault();
+-          lazy.Referrals.openReferralsTab(window, "about_dialog");
+-        }
+-      },
+-      true
+-    );
+-  }
+-
+   if (AppConstants.IS_ESR) {
+     document.getElementById("release").hidden = false;
+   }
+diff --git a/browser/base/content/aboutDialog.xhtml b/browser/base/content/aboutDialog.xhtml
+index 6effd77..4311033 100644
+--- a/browser/base/content/aboutDialog.xhtml
++++ b/browser/base/content/aboutDialog.xhtml
+@@ -14,7 +14,7 @@
+         data-l10n-id="aboutDialog-title"
+ #endif
+         role="dialog"
+-        aria-describedby="version distribution distributionId communityDesc contributeDesc trademark"
++        aria-describedby="version distribution distributionId communityDesc trademark"
+         >
+ #ifdef XP_MACOSX
+ #include macWindow.inc.xhtml
+@@ -119,24 +119,9 @@
+ #endif
+           <vbox id="experimental" hidden="true">
+             <description class="text-blurb" id="warningDesc" data-l10n-id="warningDesc-version"></description>
+-            <description class="text-blurb" id="communityExperimentalDesc" data-l10n-id="community-exp">
+-              <label is="text-link" href="https://www.mozilla.org/?utm_source=firefox-browser&#38;utm_medium=firefox-desktop&#38;utm_campaign=about-dialog" data-l10n-name="community-exp-mozillaLink"/>
+-              <label is="text-link" useoriginprincipal="true" href="about:credits" data-l10n-name="community-exp-creditsLink"/>
+-            </description>
++            <description class="text-blurb" id="communityExperimentalDesc" data-l10n-id="community-exp"/>
+           </vbox>
+-          <description class="text-blurb" id="communityDesc" data-l10n-id="community-2">
+-            <label is="text-link" href="https://www.mozilla.org/?utm_source=firefox-browser&#38;utm_medium=firefox-desktop&#38;utm_campaign=about-dialog" data-l10n-name="community-mozillaLink"/>
+-            <label is="text-link" useoriginprincipal="true" href="about:credits" data-l10n-name="community-creditsLink"/>
+-          </description>
+-          <description class="text-blurb" id="contributeDesc" data-l10n-id="helpus">
+-            <label is="text-link" href="https://foundation.mozilla.org/?form=firefox-about" data-l10n-name="helpus-donateLink"/>
+-            <label is="text-link" href="https://www.mozilla.org/contribute/?utm_source=firefox-browser&#38;utm_medium=firefox-desktop&#38;utm_campaign=about-dialog" data-l10n-name="helpus-getInvolvedLink"/>
+-          </description>
+-          <description class="text-blurb" id="contributeDescReferrals" data-l10n-id="helpus-referrals2" hidden="true">
+-            <label is="text-link" href="https://foundation.mozilla.org/?form=firefox-about" data-l10n-name="helpus-donateLink"/>
+-            <label is="text-link" useoriginprincipal="true" href="about:referrals" data-l10n-name="helpus-shareFirefoxLink"/>
+-            <label is="text-link" href="https://www.mozilla.org/contribute/?utm_source=firefox-browser&#38;utm_medium=firefox-desktop&#38;utm_campaign=about-dialog" data-l10n-name="helpus-getInvolvedLink"/>
+-          </description>
++          <description class="text-blurb" id="communityDesc" data-l10n-id="community-2"/>
+ 
+         </vbox>
+       </vbox>
+diff --git a/browser/locales/en-US/browser/aboutDialog.ftl b/browser/locales/en-US/browser/aboutDialog.ftl
+index 1b30273..89868a8 100644
+--- a/browser/locales/en-US/browser/aboutDialog.ftl
++++ b/browser/locales/en-US/browser/aboutDialog.ftl
+@@ -76,13 +76,9 @@ warningDesc-version = { -brand-short-name } is experimental and may be unstable.
+ aboutdialog-help-user = { -brand-product-name } Help
+ aboutdialog-submit-feedback = Submit Feedback
+ 
+-community-exp = <label data-l10n-name="community-exp-mozillaLink">{ -vendor-short-name }</label> is a <label data-l10n-name="community-exp-creditsLink">global community</label> working together to keep the Web open, public and accessible to all.
++community-exp = { -brand-short-name } is built from Mozilla’s Firefox source code and is not affiliated with Mozilla.
+ 
+-community-2 = { -brand-short-name } is designed by <label data-l10n-name="community-mozillaLink">{ -vendor-short-name }</label>, a <label data-l10n-name="community-creditsLink">global community</label> working together to keep the Web open, public and accessible to all.
+-
+-helpus = Want to help? <label data-l10n-name="helpus-donateLink">Make a donation</label> or <label data-l10n-name="helpus-getInvolvedLink">get involved!</label>
+-
+-helpus-referrals2 = Want to help? <label data-l10n-name="helpus-donateLink">Make a donation</label>, <label data-l10n-name="helpus-shareFirefoxLink">share { -brand-product-name }</label>, or <label data-l10n-name="helpus-getInvolvedLink">get involved!</label>
++community-2 = { -brand-short-name } is built from Mozilla’s Firefox source code and is not affiliated with Mozilla.
+ 
+ bottomLinks-license = Licensing Information
+ bottom-links-terms = Terms of Use

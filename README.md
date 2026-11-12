@@ -48,18 +48,18 @@ release. Paths marked "planned" do not exist yet.
 | Path | What |
 |---|---|
 | `upstream/firefox.json` | The Firefox release tag and commit that Orbis is built from |
-| `scripts/` | Fetch the pinned Firefox source, check that it is current, check the settings and mozconfig, apply the patches and the overlay; later: build, package, test |
+| `scripts/` | Fetch the pinned Firefox source, check that it is current, check the settings and mozconfig, apply the patches and the overlay, check a built Orbis (`verify-build.py`); later: build, package, test |
 | `overlay/` | Files copied into the Firefox build: the policy files (`distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`) and the Orbis branding (`browser/branding/orbis/`, placeholder art) |
 | `patches/` | Changes to Mozilla's own files, kept as few as possible; each one explained in `docs/PATCHES.md` |
 | `mozconfig` | Build options (Windows x64, release; no updater, crash reporter or telemetry reporting) |
-| `docs/` | Update guide, settings rationale, patches, branding rules; later: build guide, network audit, Store materials |
+| `docs/` | Update guide, build guide, settings rationale, patches, branding rules; later: network audit, Store materials |
 | `tests/` | (planned) Smoke tests and the network allow-list |
 
 Every difference between Orbis and Firefox is in this repository.
 
 ## Building
 
-TODO: `docs/BUILD.md`. The build runs on Windows with Mozilla's MozillaBuild environment and needs about 40 GB of free
+See `docs/BUILD.md`. The build runs on Windows with Mozilla's MozillaBuild environment and needs about 40 GB of free
 disk space. The Firefox source and all build output live outside this repository (by default under
 `%USERPROFILE%\orbis_desktop_src\`).
 

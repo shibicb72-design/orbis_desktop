@@ -1,0 +1,173 @@
+# Building and checking Orbis Desktop
+
+How the first Orbis build (Firefox 160, 2026-11-12) was built, packaged and checked, step by step, and the one gap
+found: `mach package` leaves out Orbis's policy files. The planned `scripts/build.ps1` and `scripts/smoke.ps1` will
+run these steps; until then, run them by hand on the build PC.
+
+Paths below use the defaults: Firefox checkout `%USERPROFILE%\orbis_desktop_src\firefox`, build output
+`%USERPROFILE%\orbis_desktop_src\obj-orbis` (`MOZ_OBJDIR` in `mozconfig`). Everything stays on drive C:.
+
+## Needed on the build PC
+
+- MozillaBuild in `C:\mozilla-build`, and the toolchains that `./mach bootstrap` installs in `%USERPROFILE%\.mozbuild`.
+  Both were already installed on the build PC; this document installs nothing.
+- Python 3 on the PATH for `scripts/check-*.py` and `scripts/verify-build.py`.
+
+## 1. Source, patches, overlay
+
+From the Orbis repository, in Windows PowerShell:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\fetch-firefox.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-patches.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-overlay.ps1
+python -I scripts\check-mozconfig.py
+python -I scripts\check-settings.py
+```
+
+`apply-patches.ps1` refuses a checkout that has only some of the patches applied (for example the first build's
+checkout, which has 0001 and 0002 but not 0003). Undo them first with the `git checkout` line in
+`docs/PATCHES.md`, then run it again.
+
+`apply-overlay.ps1` copies the branding to `browser\branding\orbis`, `mozconfig` to the top of the checkout, and
+the policy files to `orbis-dist\` in the checkout:
+
+```
+orbis-dist\orbis.cfg
+orbis-dist\defaults\pref\autoconfig.js
+orbis-dist\distribution\policies.json
+```
+
+## 2. Build
+
+`mach` runs in MozillaBuild's MSYS2 shell. The first build started it from PowerShell like this, with a clean
+environment (variables that break MozillaBuild removed) and the checkout's `mozconfig`:
+
+```
+foreach ($v in 'CYGWIN','INCLUDE','LIB','GITDIR','PYTHON','PYTHONPATH','MSYSTEM_PREFIX','MINGW_PREFIX') {
+    Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+$env:MOZILLABUILD = 'C:\mozilla-build\'
+$env:MSYSTEM = 'MSYS'
+$env:MSYS2_PATH_TYPE = 'inherit'
+$env:CHERE_INVOKING = '1'
+$env:MOZCONFIG = "$env:USERPROFILE\orbis_desktop_src\firefox\mozconfig"
+& 'C:\mozilla-build\msys2\usr\bin\bash.exe' -l build.sh
+```
+
+`build.sh`:
+
+```
+cd "$(cygpath "$USERPROFILE")/orbis_desktop_src/firefox" || exit 1
+export MACH_HIDE_DEV_DRIVE_SUGGESTION=1
+./mach build > ../build-orbis.log 2>&1 < /dev/null
+```
+
+The first build took 47 minutes (2848 s) and ended with exit code 0. The full log is under
+`obj-orbis\.mozbuild\logs\build\`; search it, do not read it whole.
+
+## 3. Package
+
+Same shell setup, with `package.sh`:
+
+```
+cd "$(cygpath "$USERPROFILE")/orbis_desktop_src/firefox" || exit 1
+export MACH_HIDE_DEV_DRIVE_SUGGESTION=1
+./mach package > ../package-orbis.log 2>&1 < /dev/null
+```
+
+It took 2 minutes and writes, in `obj-orbis\dist\`:
+
+- `orbis-160.0.en-US.win64.zip`: the application, in a top-level `orbis\` folder;
+- `install\sea\orbis-160.0.en-US.win64.installer.exe`: Firefox's NSIS installer. Not used: Orbis ships only as
+  MSIX;
+- `win64\xpi\orbis-160.0.en-US.langpack.xpi`: an en-US language pack. Not used (`docs/BRANDING.md`).
+
+## 4. The packaging gap: Orbis's policy files are not in the package
+
+`mach package` copies only the files that `browser/installer/package-manifest.in` lists. `orbis-dist\` is not
+part of the build, so the zip has no `orbis.cfg`, no `defaults\pref\autoconfig.js` and no
+`distribution\policies.json`. Started from the zip as it is, Orbis runs **without** its locked settings, its
+policies and uBlock Origin: a plain Firefox with Orbis branding. (The zip's only file under `defaults\pref` is
+`channel-prefs.js`, and it has no `distribution` folder: checked on the first build's zip.)
+
+### What the first build did: add the files after packaging
+
+```
+$dist = "$env:USERPROFILE\orbis_desktop_src\obj-orbis\dist"
+$test = "$env:USERPROFILE\orbis_desktop_src\test-install"
+Expand-Archive "$dist\orbis-160.0.en-US.win64.zip" -DestinationPath $test
+Copy-Item "$env:USERPROFILE\orbis_desktop_src\firefox\orbis-dist\*" "$test\orbis" -Recurse -Force
+```
+
+`$test\orbis` then has the layout Firefox expects: `orbis.cfg` next to `orbis.exe`, `autoconfig.js` in
+`defaults\pref\` and `policies.json` in `distribution\`. These two commands are reconstructed from the result
+(the build engineer's scripts did not record them): the test install's files match the zip and `orbis-dist`.
+
+### Proposed fix (not made in this PR; to check in a build)
+
+Option A, no change to Mozilla's files, for the MSIX: `mach repackage msix` accepts a folder as its input and
+packs every file in it, whatever the package manifest lists. It also treats the input's `distribution\` folder
+as a distribution folder. So the MSIX step can take the folder from "What the first build did" above:
+
+```
+./mach repackage msix --input <test-install>/orbis --arch x86_64 --channel <channel> --output <file>.msix ...
+```
+
+To check: the channel and the identity options (`--publisher`, `--publisher-display-name`, whose default is "Mozilla Corporation",
+`--identity-name`, `--vendor`), that `orbis.cfg` and `defaults\pref\autoconfig.js` end up under
+`VFS\ProgramFiles\<install dir>\`, and Mozilla's MSIX `distribution.ini` (next section).
+
+Option B, in the build, so that `mach package` itself includes the files:
+
+1. `apply-overlay.ps1` also copies the three files into the branding folder, and the branding's `moz.build`
+   installs them into `dist\bin`: `FINAL_TARGET_FILES[".."]` for `orbis.cfg`,
+   `FINAL_TARGET_FILES[".."].defaults.pref` for `autoconfig.js`, `FINAL_TARGET_FILES[".."].distribution` for
+   `policies.json` (the branding's `DIST_SUBDIR` is `browser`, so `..` is the install folder; Firefox's own
+   `branding-common.mozbuild` installs `firefox.VisualElementsManifest.xml` the same way).
+2. A patch to `browser/installer/package-manifest.in` lists them: `@BINPATH@/orbis.cfg`,
+   `@RESPATH@/defaults/pref/autoconfig.js`, `@RESPATH@/distribution/policies.json`. Firefox lists
+   `@RESPATH@/distribution/*` only `#if defined(BUILT_BY_MOZILLA)`.
+
+Option B makes every package complete, but it needs a patch and a build to check that the packager accepts the
+entries. Option A needs no patch. Recommendation: use A for the first MSIX, and B once the MSIX build is scripted.
+Either way, the check in step 5 (prefs locked, policies active, uBlock Origin installed) is what proves the files
+are in.
+
+### Mozilla's MSIX `distribution.ini`
+
+`mach repackage msix` always adds `browser/installer/windows/msix/distribution/distribution.ini` (`id=mozilla-MSIX`,
+`about=Windows MSIX package`) before any other distribution folder, and skips later files with the same name. The
+About dialog shows these two values, so an MSIX would say "mozilla-MSIX - 1.0" there. Open item in
+`docs/BRANDING.md`; fix it in the MSIX PR.
+
+## 5. Check the build
+
+`scripts/verify-build.py` drives the test install through Marionette, using the Marionette client from the Firefox
+checkout. Close every Orbis window first. From the Orbis repository:
+
+```
+$inst = "$env:USERPROFILE\orbis_desktop_src\test-install\orbis"
+$out  = "$env:USERPROFILE\orbis_desktop_src\verify-results"
+python -I scripts\verify-build.py default $inst $out          # profile folder; Firefox's profiles untouched
+python -I scripts\verify-build.py idle    $inst $out\idle     # 3 minutes idle: DNS log, prefs, policies, uBO
+python -I scripts\verify-build.py hosts   $inst $out\idle     # host names the idle run looked up
+python -I scripts\verify-build.py second  $inst $out\second <idle profile folder printed by the idle phase>
+python -I scripts\verify-build.py ui      $inst $out\ui       # window titles, new tab, About dialog
+```
+
+The script's header lists every output file. What to compare:
+
+- `default`: `b-dirs.json` puts the profile under `%APPDATA%\Orbis` and `%LOCALAPPDATA%\Orbis`; in `b-before.json`
+  and `b-after.json` the `%APPDATA%\Mozilla\Firefox` `profiles.ini` and `installs.ini` hashes are the same. This
+  phase starts Orbis with its real default profile; the rest use new profiles under
+  `%USERPROFILE%\orbis_desktop_src\test-profiles`.
+- `idle`: in `checks-idle.json` every pref has the value and lock state in `docs/SETTINGS.md`, `policiesStatus`
+  equals `STATUS_ACTIVE`, `about:policies` shows no errors, uBlock Origin is installed and active, and
+  `selectedFilterLists` matches the `3rdparty` policy.
+- `hosts`: every host is in `docs/SETTINGS.md`, "Network calls that remain". A new host must be added there with a
+  reason, or blocked, before release.
+- `ui`: window titles say "Orbis"; `g-main-window.png` shows no Firefox logo or Firefox-branded top site;
+  `g-about.png` and `aboutVisibleText` in `g-ui.json` match the About dialog test in `docs/PATCHES.md`.
+
+Not covered yet: the MSIX package, the Firefox-installed profile test from `docs/PATCHES.md` on a separate PC,
+and the version resources of the binaries (`(Get-Item orbis.exe).VersionInfo`).
