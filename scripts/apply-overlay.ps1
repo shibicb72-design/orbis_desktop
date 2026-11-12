@@ -15,7 +15,7 @@ What goes where (paths relative to the checkout):
   overlay\orbis.cfg                   -> orbis-dist\orbis.cfg
   overlay\defaults\pref\autoconfig.js -> orbis-dist\defaults\pref\autoconfig.js
 
-orbis-dist\ mirrors the install-folder layout; the packaging step (PR 5) puts it into the MSIX. A policy file
+orbis-dist\ mirrors the install-folder layout; the packaging step (a later PR) puts it into the MSIX. A policy file
 that is not in this branch is reported and skipped.
 
 Safety rules. The script refuses, and copies nothing, when:
@@ -34,7 +34,7 @@ run that fails halfway can simply be repeated. Nothing else in the checkout is d
 An existing mozconfig in the checkout that differs from the Orbis one (it is untracked, so git cannot restore
 it) is reported with a warning and kept as mozconfig.orbis-previous before it is overwritten.
 
-Firefox source patches (patches\) are applied separately by scripts\apply-patches.ps1 (PR 5), before this script.
+This script does not apply the Firefox source patches (patches\): scripts\apply-patches.ps1 does, and runs first.
 
 Exit code 0: copied (or, with -DryRun, would copy). Exit code 1: refused or failed.
 

@@ -70,23 +70,23 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   or lock the other's profiles (`MOZ_BLOCK_PROFILE_DOWNGRADE` is on). MSIX does not separate them: Firefox's
   dedicated-profile logic (`GetInstallHash`, `MaybeMakeDefaultDedicatedProfile`) writes to the same files when
   packaged. A trial build that only compiles is fine; starting it is not.
-  Fix: PR 5 (`pr5-source-patches`), `patches/0001-profile-folder-orbis.patch`, adds
+  Fix: `patches/0001-profile-folder-orbis.patch` (PR #4, merged), adds
   `imply_option("MOZ_APP_PROFILE", "Orbis")` (profiles in `%APPDATA%\Orbis` and `%LOCALAPPDATA%\Orbis`). The
   blocker is lifted only when that patch is applied to the build and its test passes: with Firefox installed,
   `%APPDATA%\Mozilla\Firefox\profiles.ini` and `installs.ini` stay byte-identical after Orbis runs (test plan in
-  PR 5's `docs/PATCHES.md`). Do not use `--with-app-basename=Orbis` instead: it changes the user agent to
+  `docs/PATCHES.md`). Do not use `--with-app-basename=Orbis` instead: it changes the user agent to
   `Orbis/160.0` and the search configuration (rule 4 above).
 - **STORE BLOCKER: executable version resource.** `browser/app/module.ver` (and `browser/app/pbproxy/module.ver`
   for `private_browsing.exe`) hard-codes `WIN32_MODULE_COMPANYNAME=Mozilla Corporation` and
   `WIN32_MODULE_TRADEMARKS=Firefox is a Trademark of The Mozilla Foundation.`, which `config/create_rc.py` writes
   into `orbis.exe`'s File Properties > Details. `ipc/app/module.ver` (`plugin-container.exe`) also says Mozilla
-  Corporation. No build option changes them. Fix: PR 5, `patches/0002-version-resource-orbis.patch` (company Orbis,
+  Corporation. No build option changes them. Fix: `patches/0002-version-resource-orbis.patch` (PR #4) (company Orbis,
   empty trademark line). Still open after that patch: DLLs and EXEs without a `module.ver` get `create_rc.py`'s
   defaults ("Mozilla Foundation", "Mozilla"), and `create_rc.py` writes Mozilla's `LimitedAccessFeature`
   identity. Must be settled before any Store submission.
 - **Still shared with Firefox, by design:** the enterprise-policy registry key
-  `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (and its HKCU twin). Firefox group policies set by an administrator also
-  apply to Orbis. Documented in PR 5's `docs/PATCHES.md`.
+  `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (and its HKCU twin): Firefox group policies set by an administrator also
+  apply to Orbis. Other shared registry keys are listed in `docs/PATCHES.md`, "Still shared with Firefox".
 - **About dialog text (PR 9).** `browser/locales/en-US/browser/aboutDialog.ftl` string `community-2`:
   "{ -brand-short-name } is designed by { -vendor-short-name }, a global community working together to keep the Web
   open, public and accessible to all." With `-vendor-short-name` "Orbis" this reads "Orbis is designed by Orbis, a
