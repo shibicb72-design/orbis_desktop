@@ -37,8 +37,8 @@ Items marked "planned" do not exist yet.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
 - `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
   `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`), the
-  executables' version resource (company Orbis, no Firefox trademark line) and the About dialog (no Mozilla
-  community, donation, terms or privacy links).
+  executables' version resource (company Orbis, no Firefox trademark line), the About dialog (no Mozilla
+  community, donation, terms or privacy links) and no Mozilla `distribution.ini` in the MSIX.
 - `scripts/apply-patches.ps1`: applies `patches/*.patch` to the pinned checkout after `git apply --check`; refuses
   a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing. Run it before `apply-overlay.ps1`.
 - `scripts/apply-overlay.ps1`: copies the branding to `browser/branding/orbis/`, `mozconfig` to the checkout's
@@ -59,6 +59,9 @@ Items marked "planned" do not exist yet.
   out `orbis-dist`).
 - `scripts/verify-build.py`: checks a built Orbis through Marionette (profile folder, prefs, policies, uBlock
   Origin, idle DNS lookups, About dialog). Needs a build and the Firefox checkout's Marionette client.
+- `scripts/make-msix.ps1` + `packaging/msix-config.json`: unsigned MSIX from the packaged build with
+  `mach repackage msix` (zip plus `orbis-dist`), then `makeappx unpack` checks of the manifest, assets and policy
+  files. Store identity values are `TODO-STORE` placeholders. Never signs or installs. See `docs/MSIX.md`.
 - `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
   Android.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.

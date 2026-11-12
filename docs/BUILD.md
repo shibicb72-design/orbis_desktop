@@ -103,19 +103,19 @@ Copy-Item "$env:USERPROFILE\orbis_desktop_src\firefox\orbis-dist\*" "$test\orbis
 `defaults\pref\` and `policies.json` in `distribution\`. These two commands are reconstructed from the result
 (the build engineer's scripts did not record them): the test install's files match the zip and `orbis-dist`.
 
-### Proposed fix (not made in this PR; to check in a build)
+### Fixes
 
-Option A, no change to Mozilla's files, for the MSIX: `mach repackage msix` accepts a folder as its input and
-packs every file in it, whatever the package manifest lists. It also treats the input's `distribution\` folder
-as a distribution folder. So the MSIX step can take the folder from "What the first build did" above:
+Option A (used for the MSIX, `scripts/make-msix.ps1`, see `docs/MSIX.md`): `mach repackage msix` accepts a folder
+as its input and packs every file in it, whatever the package manifest lists. It also treats the input's
+`distribution\` folder as a distribution folder. The script stages the zip plus `orbis-dist` and runs:
 
 ```
-./mach repackage msix --input <test-install>/orbis --arch x86_64 --channel <channel> --output <file>.msix ...
+./mach repackage msix --input <stage>/orbis --arch x86_64 --channel unofficial --version <X.Y.Z.0> \
+  --vendor <identity prefix> --identity-name Orbis --publisher <...> --publisher-display-name <...> --output <file>.msix
 ```
 
-To check: the channel and the identity options (`--publisher`, `--publisher-display-name`, whose default is "Mozilla Corporation",
-`--identity-name`, `--vendor`), that `orbis.cfg` and `defaults\pref\autoconfig.js` end up under
-`VFS\ProgramFiles\<install dir>\`, and Mozilla's MSIX `distribution.ini` (next section).
+Checked in the second build's MSIX: `orbis.cfg`, `defaults\pref\autoconfig.js` and `distribution\policies.json`
+are under `VFS\ProgramFiles\Orbis Package Root\`, byte-identical to `orbis-dist`.
 
 Option B, in the build, so that `mach package` itself includes the files:
 
@@ -129,7 +129,7 @@ Option B, in the build, so that `mach package` itself includes the files:
    `@RESPATH@/distribution/*` only `#if defined(BUILT_BY_MOZILLA)`.
 
 Option B makes every package complete, but it needs a patch and a build to check that the packager accepts the
-entries. Option A needs no patch. Recommendation: use A for the first MSIX, and B once the MSIX build is scripted.
+entries. Option A needs no patch for the policy files. Recommendation: A for the MSIX now (done), B later.
 Either way, the check in step 5 (prefs locked, policies active, uBlock Origin installed) is what proves the files
 are in.
 
@@ -137,8 +137,17 @@ are in.
 
 `mach repackage msix` always adds `browser/installer/windows/msix/distribution/distribution.ini` (`id=mozilla-MSIX`,
 `about=Windows MSIX package`) before any other distribution folder, and skips later files with the same name. The
-About dialog shows these two values, so an MSIX would say "mozilla-MSIX - 1.0" there. Open item in
-`docs/BRANDING.md`; fix it in the MSIX PR.
+About dialog shows these two values, so an MSIX would say "mozilla-MSIX - 1.0" there. Fixed by
+`patches/0004-msix-no-mozilla-distribution.patch`, which deletes that template file: the Orbis MSIX has no
+`distribution.ini` (`docs/MSIX.md`).
+
+## 3b. MSIX
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1
+```
+
+Unsigned `.msix` in `%USERPROFILE%\orbis_desktop_src\msix\`; values and checks in `docs/MSIX.md`. About 30 seconds.
 
 ## 5. Check the build
 
@@ -173,5 +182,6 @@ The script's header lists every output file. What to compare:
   `g-about.png`, `aboutVisibleText` and `aboutLinks` in `g-ui.json` pass the About dialog test in
   `docs/PATCHES.md` (judge by `aboutVisibleText`, not `aboutText`, which includes hidden elements).
 
-Not covered yet: the MSIX package, the Firefox-installed profile test from `docs/PATCHES.md` on a separate PC,
+Not covered yet: the MSIX package running (it is built and its contents checked, but not installed:
+`docs/MSIX.md`, "Local install test"), the Firefox-installed profile test from `docs/PATCHES.md` on a separate PC,
 and the version resources of the binaries (`(Get-Item orbis.exe).VersionInfo`).

@@ -19,10 +19,10 @@ allowed. If exactly these patches are already applied, it says so and exits 0.
 
 Undo: `git -C <checkout> checkout -- browser/moz.configure browser/app/module.ver browser/app/pbproxy/module.ver
 ipc/app/module.ver browser/base/content/aboutDialog.xhtml browser/base/content/aboutDialog.js
-browser/locales/en-US/browser/aboutDialog.ftl`.
+browser/locales/en-US/browser/aboutDialog.ftl browser/installer/windows/msix/distribution/distribution.ini`.
 
 A checkout that has an older set of these patches applied (for example 0001 and 0002 only, as the first build's
-checkout) is refused as "changes to tracked files (not exactly our patches)". Run the undo command above, then
+checkout, or 0001 to 0003) is refused as "changes to tracked files (not exactly our patches)". Run the undo command above, then
 `apply-patches.ps1` again; it applies the whole series.
 
 When the Firefox pin moves (`docs/UPDATING.md`), run `apply-patches.ps1 -Check` on the new checkout. A patch that
@@ -38,6 +38,7 @@ Order: `fetch-firefox.ps1`, then `apply-patches.ps1`, then `apply-overlay.ps1` (
 | `0001-profile-folder-orbis.patch` | `browser/moz.configure` | Adds `imply_option("MOZ_APP_PROFILE", "Orbis")` | `MOZ_APP_PROFILE` is a `project_flag` (`toolkit/moz.configure`): it takes only "implied" values from a project's `moz.configure`, not a mozconfig option or environment variable |
 | `0002-version-resource-orbis.patch` | `browser/app/module.ver`, `browser/app/pbproxy/module.ver`, `ipc/app/module.ver` | `WIN32_MODULE_COMPANYNAME` `Mozilla Corporation` becomes `Orbis`; `WIN32_MODULE_TRADEMARKS` `Firefox is a Trademark of The Mozilla Foundation.` becomes empty (added, empty, to `ipc/app/module.ver`) | These files are read as they are by `config/create_rc.py`; no build option sets them |
 | `0003-about-dialog-orbis.patch` | `browser/base/content/aboutDialog.xhtml`, `browser/base/content/aboutDialog.js`, `browser/locales/en-US/browser/aboutDialog.ftl` | About dialog: a new string `orbis-about-description` replaces `community-2` and `community-exp`, with no links; the `helpus` and `helpus-referrals2` blurbs ("Make a donation", "get involved!", "share Firefox"), the "Terms of Use" and "Privacy Notice" links and their strings are removed | The strings live in `browser/locales`, not in the branding folder, and the links are hard-coded in `aboutDialog.xhtml`; no pref or policy hides them |
+| `0004-msix-no-mozilla-distribution.patch` | `browser/installer/windows/msix/distribution/distribution.ini` (deleted) | Deletes Mozilla's MSIX partner distribution (`id=mozilla-MSIX`, `about=Windows MSIX package`, "Author: Mozilla"), so the MSIX has no `distribution.ini` | `mach repackage msix` always adds this template folder first and skips later files with the same name, so neither `--distribution-dir` nor the input's own `distribution\` can replace it; no option leaves it out. Details in `docs/MSIX.md` |
 
 ### 0001: profile folder
 

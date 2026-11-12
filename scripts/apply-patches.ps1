@@ -110,7 +110,10 @@ function Test-ExactlyPatched {
         & git -C $scratch init -q 2>&1 | Out-Null
         foreach ($f in ($Touched | Sort-Object -Unique)) {
             $src = Join-Path $script:co ($f -replace '/', '\')
-            if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { return $false }
+            # A file that a patch deletes (0004) is missing: leave it out of the scratch copy. Reversing that
+            # patch recreates it, and reversing fails if no patch deletes it, so a file missing for any other
+            # reason still makes this return false.
+            if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { continue }
             $dst = Join-Path $scratch ($f -replace '/', '\')
             New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null
             Copy-Item -LiteralPath $src -Destination $dst
