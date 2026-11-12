@@ -22,7 +22,9 @@ Option A of docs\BUILD.md: the input is a folder, not the zip, so that Orbis's p
    asset file that the config's folder lacks.
 5. Reports, without failing, every "Mozilla" or "Firefox" left in the package's file names and in the version
    resources (CompanyName, ProductName, ...) of its .exe and .dll files (docs\BRANDING.md, open items).
-6. Prints the MSIX's SHA-256 and writes it to <output>.sha256 next to the package.
+6. Prints the MSIX's SHA-256 and writes it to <output>.sha256 next to the package. With -CheckOnly it compares
+   with that file instead and fails on a mismatch or a missing file. The .sha256 guards against installing a
+   stale or wrong file, not against tampering: anything that can change the package can change it too.
 
 While packaging/msix-config.json still holds TODO-STORE placeholders, the script prints a warning block;
 -RequireStoreIdentity refuses them instead.
@@ -54,7 +56,8 @@ The .msix to write. Default: %USERPROFILE%\orbis_desktop_src\msix\<identityName>
 Default: packaging\msix-config.json in this repository.
 
 .PARAMETER CheckOnly
-Skip staging and mach; only unpack and check the existing -Output.
+Skip staging and mach; only unpack and check the existing -Output, and compare its SHA-256 with <output>.sha256
+(never rewritten by -CheckOnly).
 
 .PARAMETER AllowUnsignedInstall
 For a local test only, never for the Store: passes --unsigned to mach, which appends Microsoft's
@@ -420,8 +423,21 @@ try {
     Write-Host "  $($allFiles.Count) files in the package; AppxManifest.xml copied to $work"
     if ($failures.Count -gt 0) { throw ("{0} check(s) failed" -f $failures.Count) }
     $hash = Get-Sha256 $out
-    [System.IO.File]::WriteAllText($out + '.sha256', ("{0} *{1}`r`n" -f $hash, (Split-Path -Leaf $out)))
-    Write-Host "SHA-256: $hash (also in $out.sha256)"
+    $shaFile = $out + '.sha256'
+    if ($CheckOnly) {
+        # Compare, never rewrite: the .sha256 was written when this package was built.
+        if (-not (Test-Path -LiteralPath $shaFile -PathType Leaf)) {
+            throw "no '$shaFile' to compare with; rebuild the package (without -CheckOnly)"
+        }
+        $recorded = ((Get-Content -LiteralPath $shaFile -TotalCount 1) -split '\s+')[0]
+        if ($recorded -ne $hash) {
+            throw "SHA-256 of '$out' is $hash, but '$shaFile' says $recorded (stale or wrong file)"
+        }
+        Write-Host "SHA-256: $hash (matches $shaFile)"
+    } else {
+        [System.IO.File]::WriteAllText($shaFile, ("{0} *{1}`r`n" -f $hash, (Split-Path -Leaf $out)))
+        Write-Host "SHA-256: $hash (written to $shaFile)"
+    }
     if ($placeholders.Count -gt 0) { Write-Warning 'Built with TODO-STORE placeholders: not for upload.' }
     Write-Host "OK: $out"
     exit 0

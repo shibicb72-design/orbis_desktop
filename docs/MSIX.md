@@ -21,7 +21,10 @@ The script:
    in `docs/BUILD.md`.
 3. Runs `./mach repackage msix` in MozillaBuild's shell with the values from `packaging/msix-config.json`.
 4. Unpacks the `.msix` with `makeappx unpack` and checks it (below). Exit code 0 only if every check passes.
-5. Prints the package's SHA-256 and writes it to `<package>.msix.sha256` next to the package.
+5. Prints the package's SHA-256 and writes it to `<package>.msix.sha256` next to the package. `-CheckOnly`
+   never rewrites that file: it compares the package with it and fails on a mismatch (or a missing file). The
+   `.sha256` guards against installing a stale or wrong file, not against tampering: anything that can change
+   the package can change the `.sha256` beside it too.
 
 Output: `%USERPROFILE%\orbis_desktop_src\msix\<identityName>_<version>_x64.msix`, **unsigned**. `msix-work\`
 keeps the stage, the unpacked package, `AppxManifest.xml` and `repackage-msix.log`. With `-AllowUnsignedInstall`
@@ -138,24 +141,34 @@ Profile note: the installed Orbis uses `%APPDATA%\Orbis` (or its MSIX-virtualise
 `%LOCALAPPDATA%\Packages\<package family>\LocalCache`). The profile-isolation test in `docs/PATCHES.md` still
 belongs on a PC with Firefox installed, not this one.
 
-**Recommendation: option 4 first, then option 1. Do not use option 2. Option 3 is not recommended.**
+**Recommendation: option 4 first, then option 1. Do not use option 2. Option 3 only as a fallback if option 4 fails.**
 
-- Option 4 tests the real `.msix` file with one elevated command and leaves nothing to clean up but the app.
+- Option 4 tests the real `.msix` file with one elevated install command and one elevated undo command.
 - Option 1 then tests exactly what users get, signed by the Store.
-- Option 2 is not worth its risk (see its reasons below).
-- Option 3 registers a folder that the next `make-msix.ps1` run deletes, and runs a full-trust app from a
-  folder any program of the user can write to.
+- Option 2 has no benefit over option 4 and the most risk (see its reasons below).
+- Option 3 is the fallback if option 4 fails. It runs a full-trust app from a user-writable folder and turns
+  on Developer Mode for the whole machine.
+
+Elevated commands: if the elevated PowerShell is opened with a different administrator account (a UAC prompt
+that asks for another user's password), it runs as that account, not as Shibi. Per-user commands in it
+(`Get-AppxPackage` without `-AllUsers`, `%USERPROFILE%`, `%APPDATA%`) then see that account's packages and
+folders. Use full paths, and `-AllUsers` where given below.
 
 1. **Store private audience (no change to the PC now; second step).** Shibi reserves the name, the three
    TODO-STORE values are filled in, the package is built with `-RequireStoreIdentity`, the unsigned `.msix` is
    uploaded, and Partner Center signs it. Install it from a private audience (or a hidden listing). Slowest, but
    tests exactly what users get.
 2. **Self-signed test certificate. Do not use.** Reasons:
-   - The certificate must be trusted in the **Local Machine** "Trusted People" store: a machine-wide security
-     change. Until it is removed, anything signed with its key is trusted, and the private key sits on this PC.
-   - It needs a different `publisher` and a rebuild, so it tests a package that is not the one uploaded.
+   - It puts a trust anchor in **Local Machine** "Trusted People", with its private key on the same PC: a
+     machine-wide security change. Until it is removed, anything signed with that key is trusted.
+   - No benefit over option 4: both test a package that is not the Store-signed one, and option 4 needs no
+     certificate.
    - It has the most steps and the most to undo (two certificate stores, the key), and a missed step leaves the
      trust in place.
+
+   If it is ever used anyway, the Windows App Certification Kit (WACK) constraints apply: create the key as
+   **non-exportable**, make the certificate **code-signing only** and **valid for a few days**, and **remove it
+   right after** the test.
 
    Steps, for the record only: set a test `publisher` value (for example `CN=Orbis Test`) and rebuild,
    then create a code-signing certificate with that subject (`New-SelfSignedCertificate`, in
@@ -166,29 +179,44 @@ belongs on a PC with Firefox installed, not this one.
    `Add-AppxPackage <file>.msix`. Developer Mode is **not** needed for a signed package (sideloading is on by
    default since Windows 10 2004). Undo: remove the app, then delete the certificate and its key from both
    stores.
-3. **Developer Mode and the unpacked folder, no certificate. Not recommended.** Turn on Developer Mode
-   (Settings > System > For developers), then `Add-AppxPackage -Register <msix-work>\unpacked\pkg\AppxManifest.xml`.
-   Tests the manifest and the file layout, not the `.msix` file itself. Undo: remove the app, turn Developer Mode
-   off. **Warnings:**
-   - The registered app runs from `msix-work\unpacked\pkg`, and `make-msix.ps1` deletes and recreates that folder
-     on its next run (also with `-CheckOnly`). The installed app then breaks, or silently runs whatever the next
-     run unpacked.
+3. **Developer Mode and an unpacked copy, no certificate. Fallback only (if option 4 fails).** Tests the
+   manifest and the file layout, not the `.msix` file itself.
+   - Copy `msix-work\unpacked\pkg` to a folder of its own first, for example
+     `%USERPROFILE%\orbis_desktop_src\msix-register\pkg`, and register the copy. Never register
+     `msix-work\unpacked\pkg` itself: `make-msix.ps1` deletes and recreates it on its next run (also with
+     `-CheckOnly`), and the installed app then breaks or silently runs whatever the next run unpacked.
+   - Turn on Developer Mode (Settings > System > For developers). It is a **machine-wide** setting and stays on,
+     for every account, until it is switched off again.
+   - `Add-AppxPackage -Register <copy>\AppxManifest.xml`.
+   - **Unregister before rebuilding or replacing the copy:** `Get-AppxPackage -Name 'TODO-STORE.Orbis' |
+     Remove-AppxPackage`, then rebuild, copy again and register again.
    - It runs a full-trust app (`runFullTrust`) from a user-writable folder: any program running as the user can
-     change its files, and no signature protects files registered from a folder. A Store install
-     lives in the protected `WindowsApps` folder instead.
+     change its files, and no signature protects files registered from a folder. A Store install lives in the
+     protected `WindowsApps` folder instead.
+   - Undo: remove the app (command above), delete the copy, turn Developer Mode off.
 4. **Unsigned package with Microsoft's unsigned OID (Windows 11). Recommended first step.**
    `make-msix.ps1 -AllowUnsignedInstall` (not elevated) builds `..._unsigned-test.msix` in its own work folder
    (`msix-work-unsigned-test\`), whose publisher ends in `OID.2.25.311729368913984317654407730594956997722=1`
    (mach's `--unsigned`). It prints the package's SHA-256 and writes it to `..._unsigned-test.msix.sha256`. Then
-   open an elevated PowerShell and run **only this one command**, with the path and the hash from that file. It
-   compares the SHA-256 immediately before installing, so a file changed since the build is not installed:
+   open an elevated PowerShell and run **only this one command**, with the full path and the hash from that
+   file. It compares the SHA-256 immediately before installing, so a stale or wrong file is not installed:
 
    ```
    $f = '<full path>\TODO-STORE.Orbis_160.0.0.0_x64_unsigned-test.msix'; if ((Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash -eq '<SHA-256 from the .sha256 file>') { Add-AppxPackage -Path $f -AllowUnsigned } else { 'SHA-256 mismatch: not installed' }
    ```
 
-   Close the elevated window right after. No certificate and no Developer Mode. Undo (not elevated):
-   `Get-AppxPackage -Name 'TODO-STORE.Orbis' | Remove-AppxPackage`. Never upload this variant.
+   Close the elevated window right after. No certificate and no Developer Mode. Never upload this variant.
+
+   - **Installed for all users.** Microsoft's documentation says an unsigned package with executable content
+     must be installed for all users, so a per-user removal is not enough. **Undo needs elevation too**, in an
+     elevated PowerShell: `Get-AppxPackage -AllUsers -Name 'TODO-STORE.Orbis' | Remove-AppxPackage -AllUsers`.
+   - **Test-only identity.** Its publisher (with the unsigned OID) differs from the Store package's, so its
+     package family differs too. Its data folder (`%LOCALAPPDATA%\Packages\<package family>`) and its
+     default-app registrations (protocols, file types) belong to this test package only: nothing carries over
+     to the Store install, and they go away with the undo.
+   - **May not install.** Firefox's manifest template asks for `PackageIntegrity` enforcement. Whether that
+     blocks an unsigned install is unknown (not tested). If the install fails, fall back to option 3.
+
    Built and checked on 2026-11-12, not installed: 142,176,013 bytes, SHA-256
    `7585F49524A29E1E5F07F81FC94345D3C8B5BA142AB29A420422B93741F1691C`. The build is not byte-for-byte
    reproducible (the first build of PR #6 had a different hash), so always compare against the `.sha256` of the
