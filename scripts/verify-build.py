@@ -19,8 +19,30 @@ Phases:
   idle     New profile, headless, left idle for 3 minutes with a DNS log (MOZ_LOG timestamp,sync,
            nsHostResolver:5, dns.log*; "sync" writes every line at once, so the release build's fast shutdown
            loses nothing) and TCP sampling of the started process tree (f-tcp.json); then prefs, policies,
-           about:policies and uBlock Origin's filter lists (checks-idle.json, aboutpolicies-idle.json/.png).
-  second   Second start of an idle profile (EXTRA = the profile folder, which must be inside --profiles):
+           about:policies and uBlock Origin (checks-idle.json, aboutpolicies-idle.json/.png). Nobody answers
+           the first-run consent screen here, so uBlock Origin must not be installed.
+  consent  First-run uBlock Origin consent screen (EXTRA = accept, decline, close, early, cancel, url). New profile,
+           headless, with the same DNS log. Before the answer: about:welcome shows the screen with the checkbox
+           on, and there is no uBlock Origin, no add-on install and no addons.mozilla.org lookup. accept:
+           Continue with the checkbox on, accept Firefox's permission prompt; uBlock Origin is installed and its
+           selected lists are exactly the 13 lists in policies.json "3rdparty". decline: uncheck (the warning
+           about phishing and malware protection must show), Continue; after 60 seconds there is no uBlock
+           Origin, no install and no addons.mozilla.org lookup in the whole DNS log. close: leave the screen
+           and quit without answering. early: Continue with the checkbox on, then "Start browsing" before
+           Firefox's Add prompt is answered. cancel: Continue with the checkbox on, then Cancel in that prompt.
+           url: like close, then a start with a URL on the command line (the screen moves to the next plain
+           start; the Start-menu pin stays off). close, early, cancel and url leave no uBlock Origin, so the
+           next plain start must show the screen again
+           (without re-pinning the MSIX to the Start menu), where it is declined. accept: uBlock Origin is
+           removed again in a later start, which must not bring the question back. All: the choice pref is
+           recorded, and two later starts of the same profile do not show the screen again.
+           Writes consent-<choice>.json (with a "pass" map and "PASS"/"FAIL"), checks-consent-<choice>.json,
+           consent-<choice>-screen.png and the DNS log. "addons.mozilla.org lookup" means any host name ending
+           in addons.mozilla.org (also services. and versioncheck-bg.). With --system-locale (for example
+           de-DE) the profile pretends that Windows uses that language
+           (intl.multilingual.aboutWelcome.systemLocaleOverride), the case in which about:welcome would offer a
+           language pack from addons.mozilla.org: run accept and decline with it too.
+  second   Second start of an accepted profile (EXTRA = the profile folder, which must be inside --profiles):
            uBlock Origin re-applies its enforced lists at launch (checks-second.json).
   ui       New profile with a window: window titles, brand strings, main window and About dialog screenshots and
            the About dialog text (g-ui.json, g-main-window.png, g-about.png).
@@ -58,13 +80,19 @@ MOZBASE_MODULES = ["mozrunner", "mozprofile", "mozversion", "mozlog", "mozinfo",
 def parse_args():
     home = os.environ.get("USERPROFILE", "")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("phase", choices=["default", "idle", "second", "ui", "hosts", "quit"])
+    ap.add_argument("phase", choices=["default", "idle", "consent", "second", "ui", "hosts", "quit"])
     ap.add_argument("install_dir")
     ap.add_argument("out_dir")
-    ap.add_argument("extra", nargs="?", help="second: the profile folder; quit: the Marionette port")
+    ap.add_argument("extra", nargs="?",
+                    help="consent: accept, decline, close, early, cancel or url; second: the profile folder; quit: the Marionette port")
     ap.add_argument("--source", default=os.path.join(home, "orbis_desktop_src", "firefox"))
     ap.add_argument("--profiles", default=os.path.join(home, "orbis_desktop_src", "test-profiles"))
-    return ap.parse_args()
+    ap.add_argument("--system-locale", default=None,
+                    help="consent: Windows language to simulate in the test profile, for example de-DE")
+    args = ap.parse_args()
+    if args.system_locale and not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*", args.system_locale):
+        ap.error("--system-locale must be a locale code such as de-DE")
+    return args
 
 
 def real_on_c(path):
@@ -134,7 +162,7 @@ def tree_state():
     return res
 
 
-def launch(profile, port, headless=True, extra_env=None, no_profile=False):
+def launch(profile, port, headless=True, extra_env=None, no_profile=False, extra_prefs=None, urls=None):
     env = dict(os.environ)
     env["MOZ_REMOTE_ALLOW_SYSTEM_ACCESS"] = "1"
     for k in ("XRE_PROFILE_PATH", "MOZ_HEADLESS"):
@@ -150,7 +178,10 @@ def launch(profile, port, headless=True, extra_env=None, no_profile=False):
             f.write('user_pref("marionette.port", %d);\n' % port)
             # Marionette must not apply its recommended (automation) prefs: they change network behaviour.
             f.write('user_pref("remote.prefs.recommended", false);\n')
+            for k, v in (extra_prefs or {}).items():
+                f.write("user_pref(%s, %s);\n" % (json.dumps(k), json.dumps(v)))
         args += ["-profile", profile, "--new-instance"]
+    args += urls or []
     log("launch:", args)
     return subprocess.Popen(args, env=env)
 
@@ -275,7 +306,14 @@ PREFS = [
     "orbis.privacy.etpStrictApplied", "network.captive-portal-service.enabled",
     "network.connectivity-service.enabled", "network.trr.mode", "media.eme.enabled",
     "general.config.filename", "app.update.enabled",
+    "browser.aboutwelcome.enabled", "browser.aboutwelcome.experimentsGate.enabled",
+    "startup.homepage_welcome_url", "messaging-system-action.orbis.ubo.consent",
+    "intl.multilingual.aboutWelcome.languageMismatchEnabled", "trailhead.firstrun.didHandleCampaignAction",
+    "network.dns.disablePrefetch", "network.prefetch-next", "network.http.speculative-parallel-limit",
 ]
+CONSENT_PREF = "messaging-system-action.orbis.ubo.consent"
+AMO_HOST = "addons.mozilla.org"
+LOCALE_OVERRIDE_PREF = "intl.multilingual.aboutWelcome.systemLocaleOverride"
 
 CHECK_JS = r"""
 const [prefs, ubo, done] = [arguments[0], arguments[1], arguments[arguments.length - 1]];
@@ -436,6 +474,318 @@ def phase_idle():
     log(json.dumps({k: res.get(k) for k in ("policiesStatus", "ubo", "selectedFilterLists", "error")}, indent=1))
 
 
+ADDON_STATE_JS = r"""
+const [ubo, pref, done] = [arguments[0], arguments[1], arguments[arguments.length - 1]];
+(async () => {
+  const out = {};
+  try {
+    const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+    const a = await AddonManager.getAddonByID(ubo);
+    out.ubo = a ? {version: a.version, isActive: a.isActive} : null;
+    out.installs = (await AddonManager.getAllInstalls()).map(i => ({
+      id: i.addon ? i.addon.id : (i.existingAddon ? i.existingAddon.id : null),
+      url: i.sourceURI && i.sourceURI.spec, state: i.state, error: i.error}));
+    out.choice = Services.prefs.getPrefType(pref) ? Services.prefs.getStringPref(pref) : null;
+    out.seenInstalled = Services.prefs.getBoolPref("orbis.ubo.seenInstalled", false);
+    out.firstRunDone = Services.prefs.getBoolPref("orbis.firstRunDone", false);
+    // true only on a repeated ask: Firefox must not re-pin the MSIX to the Start menu then.
+    out.startMenuPinOff = Services.prefs.getBoolPref("browser.shell.disableStartMenuPin", false);
+    out.tabs = [];
+    for (const w of Services.wm.getEnumerator("navigator:browser")) {
+      for (const b of w.gBrowser.browsers) out.tabs.push(b.currentURI.spec);
+    }
+    const n = Services.wm.getMostRecentWindow("navigator:browser")
+      ?.PopupNotifications?.getNotification("addon-webext-permissions");
+    out.permissionPrompt = n ? {message: n.message && String(n.message)} : null;
+  } catch (e) { out.error = String(e) + "\n" + e.stack; }
+  done(out);
+})();
+"""
+
+CANCEL_PROMPT_JS = r"""
+const done = arguments[arguments.length - 1];
+const n = Services.wm.getMostRecentWindow("navigator:browser").PopupNotifications
+  .getNotification("addon-webext-permissions");
+if (!n) { done(false); } else { n.secondaryActions[0].callback(); done(true); }
+"""
+
+UNINSTALL_UBO_JS = r"""
+const [ubo, done] = [arguments[0], arguments[arguments.length - 1]];
+(async () => {
+  const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+  const a = await AddonManager.getAddonByID(ubo);
+  if (a) { await a.uninstall(); }
+  done(!!a);
+})();
+"""
+
+ACCEPT_PROMPT_JS = r"""
+const done = arguments[arguments.length - 1];
+const w = Services.wm.getMostRecentWindow("navigator:browser");
+const n = w.PopupNotifications.getNotification("addon-webext-permissions");
+if (!n) { done(false); }
+else {
+  // The prompt's own "Add" button when the panel is shown; its main action otherwise (headless).
+  const el = w.document.getElementById("addon-webext-permissions-notification");
+  if (el && el.button && !el.hidden) { el.button.click(); done("button"); }
+  else { n.mainAction.callback(); done("mainAction"); }
+}
+"""
+
+
+def dns_hosts(folder):
+    """Host name -> number of lookups, from the dns.log* files in folder (MOZ_LOG nsHostResolver:5)."""
+    counts = collections.Counter()
+    for path in sorted(glob.glob(os.path.join(folder, "dns.log*"))):
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                for host in re.findall(r"Resolving host \[([^\]]+)\]", line):
+                    counts[host] += 1
+    return counts
+
+
+def amo_lookups(hosts):
+    """Lookups of addons.mozilla.org and its subdomains (services., versioncheck-bg.) in a dns_hosts() result."""
+    return sum(n for h, n in hosts.items() if h == AMO_HOST or h.endswith("." + AMO_HOST))
+
+
+def expected_lists():
+    """uBlock Origin's toOverwrite.filterLists from the policies.json that the tested install uses."""
+    with open(os.path.join(INSTALL, "distribution", "policies.json"), encoding="utf-8") as f:
+        pol = json.load(f)["policies"]
+    return pol["3rdparty"]["Extensions"][UBO]["toOverwrite"]["filterLists"]
+
+
+def wait_for(m, what, test, timeout, step=2):
+    """Polls ADDON_STATE_JS until test(state) is true or timeout seconds pass; returns the last state."""
+    end = time.time() + timeout
+    while True:
+        st = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+        if test(st) or time.time() > end:
+            log("%s: %s" % (what, "yes" if test(st) else "TIMEOUT"))
+            return st
+        time.sleep(step)
+
+
+def switch_to_welcome(m):
+    """Switches Marionette's content context to the about:welcome tab; returns True when found."""
+    for h in m.window_handles:
+        m.switch_to_window(h)
+        if m.get_url().startswith("about:welcome"):
+            return True
+    return False
+
+
+CONSENT_CHOICES = ("accept", "decline", "close", "early", "cancel", "url")
+# Choices that leave the question unsettled, so the next start must ask again.
+ASK_AGAIN_CHOICES = ("close", "early", "cancel", "url")
+# A local page for the "url" case: a start with a URL on the command line, as when another app opens a link.
+URL_START_PAGE = "about:logo"
+
+
+def welcome_open(m):
+    """Waits for the about:welcome tab; returns the last add-on state."""
+    st = wait_for(m, "about:welcome open", lambda s: any(t.startswith("about:welcome") for t in s["tabs"]), 60)
+    time.sleep(5)  # the page renders its screen after it has loaded
+    return st
+
+
+def check_screen(m, res, ok, tag, prev_choice=None, amo_base=0):
+    """Records the unanswered screen: shown, checked by default, no uBlock Origin, no AMO lookup yet. On a
+    repeated ask, prev_choice is the choice already stored and amo_base the AMO lookups of the earlier starts."""
+    b = res[tag + "Before"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+    res[tag + "AmoLookupsBefore"] = amo_lookups(dns_hosts(OUT)) - amo_base
+    if not switch_to_welcome(m):
+        raise RuntimeError("no about:welcome tab: %r" % b["tabs"])
+    box = m.find_element("css selector", "#orbis-install-ubo")
+    res[tag + "ScreenText"] = m.execute_script("return document.body.innerText")
+    ok[tag + "ScreenShown"] = "Install uBlock Origin ad blocker" in res[tag + "ScreenText"]
+    ok[tag + "CheckedByDefault"] = box.is_selected() is True
+    ok[tag + "NoUboBeforeConsent"] = b["ubo"] is None and not b["installs"] and b["choice"] == prev_choice
+    ok[tag + "NoAmoBeforeConsent"] = res[tag + "AmoLookupsBefore"] == 0
+    return box
+
+
+def decline_on_screen(m, res, ok, box, shot):
+    """Unchecks the box, checks the warning, saves a screenshot and clicks Continue."""
+    box.click()
+    time.sleep(1)
+    res["screenTextUnchecked"] = text = m.execute_script("return document.body.innerText")
+    ok["uncheckedByClick"] = box.is_selected() is False
+    ok["warnsNoPhishingMalwareProtection"] = all(
+        s in text for s in ("phishing and malware", "Google Safe Browsing", "Tracking protection is not affected",
+                            "Extensions and Themes"))
+    with open(os.path.join(OUT, shot), "wb") as f:
+        f.write(m.screenshot(format="binary"))
+    m.find_element("css selector", "button.primary").click()
+    log("clicked Continue (box unchecked)")
+
+
+def phase_consent():
+    """accept, decline: answer on the first start. close: leave the screen and quit without answering. early:
+    Continue with the box checked, then "Start browsing" at once, before Firefox's Add prompt is answered.
+    cancel: Continue with the box checked, then Cancel in Firefox's prompt. close, early and cancel leave the
+    question unsettled: the next start must show the screen again. url: like close, then a start with a URL
+    (no screen, Start-menu pin still off), then a plain start that must show the screen (and must not re-pin the MSIX to the Start
+    menu); it is declined there. accept: in the first later start uBlock Origin is removed again. All: the two
+    later starts must not show the screen."""
+    choice = ARGS.extra
+    if choice not in CONSENT_CHOICES:
+        sys.exit("consent: give one of %s as EXTRA" % ", ".join(CONSENT_CHOICES))
+    prof = new_profile("consent-" + choice)
+    res = {"choice": choice, "profile": prof, "systemLocale": ARGS.system_locale, "pass": {}}
+    prefs = {LOCALE_OVERRIDE_PREF: ARGS.system_locale} if ARGS.system_locale else None
+    ok = res["pass"]
+
+    def start(logname):
+        return launch(prof, 28284, headless=True, extra_prefs=prefs,
+                      extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5",
+                                 "MOZ_LOG_FILE": os.path.join(OUT, logname)})
+
+    proc = m = None
+    try:
+        proc = start("dns.log")
+        m = connect(28284)
+        welcome_open(m)
+        box = check_screen(m, res, ok, "first")
+        if choice == "decline":
+            decline_on_screen(m, res, ok, box, "consent-decline-screen.png")
+        elif choice in ("close", "url"):
+            with open(os.path.join(OUT, "consent-%s-screen.png" % choice), "wb") as f:
+                f.write(m.screenshot(format="binary"))
+            m.navigate("about:blank")  # the user leaves the screen without answering ...
+            time.sleep(2)
+            res["afterLeaving"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["noChoiceAfterLeaving"] = res["afterLeaving"]["choice"] is None
+        else:
+            with open(os.path.join(OUT, "consent-%s-screen.png" % choice), "wb") as f:
+                f.write(m.screenshot(format="binary"))
+            m.find_element("css selector", "button.primary").click()
+            log("clicked Continue (box checked)")
+
+        if choice == "accept":
+            st = wait_for(m, "permission prompt", lambda s: s["permissionPrompt"] or s["ubo"], 90)
+            res["permissionPrompt"] = st["permissionPrompt"]
+            if st["permissionPrompt"]:
+                res["promptAcceptedBy"] = chrome(m, ACCEPT_PROMPT_JS)
+            wait_for(m, "uBlock Origin active", lambda s: s["ubo"] and s["ubo"]["isActive"], 120)
+            # The second screen ("Installing uBlock Origin...") stays until the user starts browsing.
+            if switch_to_welcome(m):
+                res["secondScreenText"] = m.execute_script("return document.body.innerText")
+                m.find_element("css selector", "button.primary").click()
+            st = wait_for(m, "home page", lambda s: "about:home" in s["tabs"], 30)
+            ok["finishedOnHome"] = st["tabs"] == ["about:home"]
+            want = expected_lists()
+            end = time.time() + 180
+            while True:
+                checks = run_checks(m, "consent-accept")
+                if sorted(checks.get("selectedFilterLists") or []) == sorted(want) or time.time() > end:
+                    break
+                time.sleep(10)
+            res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            res["selectedFilterLists"] = checks.get("selectedFilterLists")
+            ok["uboInstalled"] = bool(res["after"]["ubo"] and res["after"]["ubo"]["isActive"])
+            ok["lists13"] = len(want) == 13 and sorted(res["selectedFilterLists"] or []) == sorted(want)
+            ok["choiceRecorded"] = res["after"]["choice"] == "accepted"
+        elif choice == "early":
+            # "Start browsing" on the second screen at once, without answering Firefox's prompt.
+            time.sleep(1)
+            if not switch_to_welcome(m):
+                raise RuntimeError("the second screen is gone")
+            res["secondScreenText"] = m.execute_script("return document.body.innerText")
+            m.find_element("css selector", "button.primary").click()
+            log("clicked Start browsing before the prompt was answered")
+            time.sleep(30)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["noUboWithoutAdd"] = a["ubo"] is None and not a["installs"] and a["permissionPrompt"] is None
+            ok["choiceRecorded"] = a["choice"] == "accepted"
+            ok["finishedOnHome"] = a["tabs"] == ["about:home"]
+        elif choice == "cancel":
+            st = wait_for(m, "permission prompt", lambda s: s["permissionPrompt"] or s["ubo"], 90)
+            res["promptCancelled"] = chrome(m, CANCEL_PROMPT_JS)
+            time.sleep(10)
+            if switch_to_welcome(m):
+                m.find_element("css selector", "button.primary").click()  # Start browsing
+            time.sleep(5)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["promptShownAndCancelled"] = res["promptCancelled"] is True
+            ok["noUboAfterCancel"] = a["ubo"] is None and not a["installs"]
+            ok["choiceRecorded"] = a["choice"] == "accepted"
+        elif choice == "decline":
+            time.sleep(60)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            run_checks(m, "consent-decline")
+            ok["noUbo"] = a["ubo"] is None and not a["installs"] and a["permissionPrompt"] is None
+            ok["choiceRecorded"] = a["choice"] == "declined"
+            ok["finishedOnHome"] = a["tabs"] == ["about:home"]
+    finally:
+        stop_browser(proc, m)
+
+    if choice == "url":
+        # A start with a URL skips Firefox's first-window logic: the screen is not shown and the milestone that
+        # orbis.cfg cleared is not saved again. The Start-menu pin must stay off here and at the next plain start.
+        proc = m = None
+        try:
+            proc = launch(prof, 28284, headless=True, extra_prefs=prefs, urls=[URL_START_PAGE],
+                          extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5",
+                                     "MOZ_LOG_FILE": os.path.join(OUT, "dns.log.urlstart")})
+            m = connect(28284)
+            time.sleep(10)
+            st = res["urlStart"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            res["urlStartShowedScreen"] = any(t.startswith("about:welcome") for t in st["tabs"])
+            ok["urlStartOpensUrl"] = URL_START_PAGE in st["tabs"]
+            ok["noStartMenuRepinOnUrlStart"] = st["startMenuPinOff"] is True
+        finally:
+            stop_browser(proc, m)
+    if choice in ASK_AGAIN_CHOICES:
+        # Orbis starts again (plain start): the screen must come back. Answer it this time (decline).
+        prev_choice = (res.get("after") or {}).get("choice")
+        amo_base = amo_lookups(dns_hosts(OUT))
+        proc = m = None
+        try:
+            proc = start("dns.log.start2")
+            m = connect(28284)
+            st = welcome_open(m)
+            ok["askedAgain"] = any(t.startswith("about:welcome") for t in st["tabs"])
+            ok["noStartMenuRepinOnAskAgain"] = st["startMenuPinOff"] is True
+            ok["startMenuPinAllowedOnRealFirstRun"] = res["firstBefore"]["startMenuPinOff"] is False
+            box = check_screen(m, res, ok, "again", prev_choice, amo_base)
+            decline_on_screen(m, res, ok, box, "consent-close-again-screen.png")
+            time.sleep(20)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["noUbo"] = a["ubo"] is None and not a["installs"]
+            ok["choiceDeclinedOnAskAgain"] = a["choice"] == "declined"
+        finally:
+            stop_browser(proc, m)
+
+    hosts = dns_hosts(OUT)
+    res["dnsHosts"] = dict(sorted(hosts.items()))
+    if choice == "accept":
+        ok["amoLookupAfterConsent"] = hosts.get(AMO_HOST, 0) > 0
+    elif choice in ("decline", "close", "url"):
+        ok["noAmoLookup"] = amo_lookups(hosts) == 0
+    # Later starts of the same profile: after an answer the screen must never come back.
+    res["laterStarts"] = []
+    for i in range(2):
+        proc = m = None
+        try:
+            proc = launch(prof, 28284, headless=True)
+            m = connect(28284)
+            time.sleep(15)
+            res["laterStarts"].append(chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF]))
+            if choice == "accept" and i == 0:
+                # The user removes uBlock Origin later: that must not bring the question back.
+                ok["seenInstalledRecorded"] = res["laterStarts"][0]["seenInstalled"] is True
+                ok["uboRemoved"] = chrome(m, UNINSTALL_UBO_JS, [UBO]) is True
+        finally:
+            stop_browser(proc, m)
+    ok["notAskedAgain"] = not any(t.startswith("about:welcome") for s in res["laterStarts"] for t in s["tabs"])
+    ok["noStartMenuPinOffWhenSettled"] = not any(s["startMenuPinOff"] for s in res["laterStarts"])
+    res["result"] = "PASS" if ok and all(ok.values()) else "FAIL"
+    dump("consent-%s.json" % choice, res)
+    log(json.dumps({k: res[k] for k in ("pass", "result", "profile")}, indent=1))
+
+
 def phase_second():
     if not ARGS.extra:
         sys.exit("second: give the idle profile folder as EXTRA")
@@ -510,16 +860,9 @@ def ui_checks(m, root_pid):
 
 
 def phase_hosts():
-    counts = collections.Counter()
-    files = sorted(glob.glob(os.path.join(OUT, "dns.log*")))
-    if not files:
-        sys.exit("No dns.log* files in %s (run the idle phase first)" % OUT)
-    for path in files:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                for host in re.findall(r"Resolving host \[([^\]]+)\]", line):
-                    counts[host] += 1
-    for host, n in sorted(counts.items()):
+    if not glob.glob(os.path.join(OUT, "dns.log*")):
+        sys.exit("No dns.log* files in %s (run the idle or consent phase first)" % OUT)
+    for host, n in sorted(dns_hosts(OUT).items()):
         print("%5d  %s" % (n, host))
 
 
@@ -535,5 +878,5 @@ def phase_quit():
 if __name__ == "__main__":
     if ARGS.phase not in ("hosts", "quit") and not os.path.isfile(EXE):
         sys.exit("No orbis.exe in %s" % INSTALL)
-    {"default": phase_default, "idle": phase_idle, "second": phase_second, "ui": phase_ui,
+    {"default": phase_default, "idle": phase_idle, "consent": phase_consent, "second": phase_second, "ui": phase_ui,
      "hosts": phase_hosts, "quit": phase_quit}[ARGS.phase]()

@@ -22,7 +22,8 @@ The features below describe the target, not a finished product.
 
 ## What it does
 
-- Blocks ads and trackers with uBlock Origin, installed automatically from addons.mozilla.org on first run.
+- Blocks ads and trackers with uBlock Origin, offered on a first-run screen (checked by default) and installed
+  from addons.mozilla.org if the user agrees.
 - Strict tracking protection and per-site cookie isolation on every tab.
 - HTTPS-only mode on by default.
 - No telemetry, no studies, no crash reports, no accounts, no sync, no sponsored content, no AI chat.

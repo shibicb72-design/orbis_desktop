@@ -130,8 +130,8 @@ Option B, in the build, so that `mach package` itself includes the files:
 
 Option B makes every package complete, but it needs a patch and a build to check that the packager accepts the
 entries. Option A needs no patch for the policy files. Recommendation: A for the MSIX now (done), B later.
-Either way, the check in step 5 (prefs locked, policies active, uBlock Origin installed) is what proves the files
-are in.
+Either way, the check in step 5 (prefs locked, policies active, the uBlock Origin consent screen) is what proves
+the files are in.
 
 ### Mozilla's MSIX `distribution.ini`
 
@@ -158,9 +158,18 @@ checkout. Close every Orbis window first. From the Orbis repository:
 $inst = "$env:USERPROFILE\orbis_desktop_src\test-install\orbis"
 $out  = "$env:USERPROFILE\orbis_desktop_src\verify-results"
 python -I scripts\verify-build.py default $inst $out          # profile folder; Firefox's profiles untouched
-python -I scripts\verify-build.py idle    $inst $out\idle     # 3 minutes idle: DNS log, prefs, policies, uBO
+python -I scripts\verify-build.py idle    $inst $out\idle     # 3 minutes idle: DNS log, prefs, policies, no uBO
 python -I scripts\verify-build.py hosts   $inst $out\idle     # host names the idle run looked up
-python -I scripts\verify-build.py second  $inst $out\second <idle profile folder printed by the idle phase>
+python -I scripts\verify-build.py consent $inst $out\accept  accept   # first-run screen, accepted: uBO + 13 lists
+python -I scripts\verify-build.py consent $inst $out\decline decline  # first-run screen, declined: no uBO, no AMO
+python -I scripts\verify-build.py consent $inst $out\accept-de  accept  --system-locale de-DE   # same, on a
+python -I scripts\verify-build.py consent $inst $out\decline-de decline --system-locale de-DE   # German Windows
+python -I scripts\verify-build.py consent $inst $out\close   close    # left unanswered: back at next start
+python -I scripts\verify-build.py consent $inst $out\close-de close --system-locale de-DE
+python -I scripts\verify-build.py consent $inst $out\early   early    # "Start browsing" before Firefox's Add
+python -I scripts\verify-build.py consent $inst $out\cancel  cancel   # "Cancel" in Firefox's Add prompt
+python -I scripts\verify-build.py consent $inst $out\url     url      # unanswered, then a start with a URL
+python -I scripts\verify-build.py second  $inst $out\second <profile folder printed by the consent accept phase>
 python -I scripts\verify-build.py ui      $inst $out\ui       # window titles, new tab, About dialog
 ```
 
@@ -173,8 +182,30 @@ The script's header lists every output file. What to compare:
   `%USERPROFILE%\orbis_desktop_src\test-profiles`; `second` accepts only a profile inside that folder. Every phase
   stops the Orbis it started, also after an error (Marionette quit, then `taskkill /T /F` on its PID).
 - `idle`: in `checks-idle.json` every pref has the value and lock state in `docs/SETTINGS.md`, `policiesStatus`
-  equals `STATUS_ACTIVE`, `about:policies` shows no errors, uBlock Origin is installed and active, and
-  `selectedFilterLists` matches the `3rdparty` policy.
+  equals `STATUS_ACTIVE` and `about:policies` shows no errors. Nobody answers the first-run screen in this phase,
+  so `ubo` must be null: no silent install.
+- `consent`: every `consent-<choice>.json` ends with `"result": "PASS"`. The `pass` map names each check:
+  - all choices: the screen is shown with the box checked, and there is no uBlock Origin, install or
+    `addons.mozilla.org` lookup before the answer;
+  - accept: uBlock Origin is active with exactly the 13 `3rdparty` lists, and removing it again (in the first
+    later start) does not bring the screen back;
+  - decline: the warning about phishing and malware protection shows; there is no uBlock Origin and no
+    `addons.mozilla.org` lookup at all;
+  - close: the screen is left and Orbis quit without an answer, so no choice is recorded;
+  - early: "Start browsing" before Firefox's Add prompt; cancel: "Cancel" in that prompt. Both leave no uBlock
+    Origin, and the choice is `accepted`;
+  - url: like close, then a start with `about:logo` on the command line, which opens that page and keeps
+    `browser.shell.disableStartMenuPin` true;
+  - close, early, cancel, url: the screen is back at the next plain start, where `browser.shell.disableStartMenuPin`
+    is true (no MSIX Start-menu re-pin; it was false on the real first run), and is declined there;
+  - all choices: two later starts do not show the screen. Any host ending in
+  `addons.mozilla.org` counts. The `--system-locale de-DE` runs set `intl.multilingual.aboutWelcome.systemLocaleOverride`
+  in the test profile, so `about:welcome` sees a Windows language that differs from Orbis's; without the
+  `languageMismatchEnabled` lock it would then ask `services.addons.mozilla.org` for language packs before the answer.
+  `consent-<choice>-screen.png` shows the screen. The accept run also runs the `idle` checks
+  (`checks-consent-accept.json`). The test accepts Firefox's "Add uBlock Origin?" prompt itself; it runs headless,
+  so look at the screen once in a real window too.
+- `second`: on the accepted profile, `selectedFilterLists` still matches the `3rdparty` policy.
 - `hosts`: every host is in `docs/SETTINGS.md`, "Network calls that remain". A new host must be added there with a
   reason, or blocked, before release. The idle phase logs with `MOZ_LOG=timestamp,sync,nsHostResolver:5`: without
   `sync`, the first build's DNS log lost everything after the first 30 seconds when the release build shut down.

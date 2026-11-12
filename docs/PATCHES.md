@@ -140,7 +140,8 @@ the profile collision is unfixed (`docs/BRANDING.md`):
 1. Close Firefox. Record SHA-256 hashes of `%APPDATA%\Mozilla\Firefox\profiles.ini` and
    `%APPDATA%\Mozilla\Firefox\installs.ini`, and the file list with sizes and dates of `%APPDATA%\Mozilla\Firefox`
    and `%LOCALAPPDATA%\Mozilla\Firefox`.
-2. Install the Orbis MSIX, start it, browse, let uBlock Origin install, close it. Start it a second time and close.
+2. Install the Orbis MSIX, start it, keep "Install uBlock Origin ad blocker" checked on the first-run screen and
+   accept the install, browse, close it. Start it a second time and close.
 3. Pass: both `.ini` files are byte-identical (same hashes), nothing in the two Mozilla folders was added or
    changed, and Orbis's profile is under `%APPDATA%\Orbis` and `%LOCALAPPDATA%\Orbis` (or their MSIX-virtualised
    equivalents under `%LOCALAPPDATA%\Packages\<package>\LocalCache`).

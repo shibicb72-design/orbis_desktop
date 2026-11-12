@@ -30,6 +30,17 @@ What fails (exit code 1):
 - a pref or top-level policy with no row (its name in backticks) in docs/SETTINGS.md;
 - with --ubo-assets (uBlock Origin's assets.json): a filter-list token that uBlock Origin does not know,
   or one of uBlock Origin's default lists missing from our toOverwrite.filterLists.
+- uBlock Origin consent (Store policy 10.1.5): any add-on that policies.json installs without the user
+  (ExtensionSettings force_installed or normal_installed, Extensions.Install); a policy that switches
+  about:welcome off (OverrideFirstRunPage, DisableAccounts, DisableFirefoxAccounts, UserMessaging
+  SkipOnboarding); orbis.cfg not locking about:welcome on as the first-run page with
+  ORBIS_UBO_CONSENT_SCREENS; and in those screens: not exactly one INSTALL_ADDON_FROM_URL, or that one not
+  the uBlock Origin AMO URL in the checkedAction of a checkbox that is on by default, or the Continue button
+  not collecting the checkbox, or no screen after it (leaving about:welcome cancels an install whose
+  permission prompt is still open); orbis.cfg not locking the language-mismatch step, the campaign action,
+  the Nimbus wait and the additional welcome page off (CONSENT_LOCKS). With a full checkout also: the
+  pinned source missing anything the screens use (CONSENT_SOURCE, about:home in ALLOWED_ABOUT_PAGES), or a
+  policy in policies.json that sets browser.aboutwelcome.enabled in Policies.sys.mjs.
 
 Prints OK, or every problem found. Reads files only; changes nothing.
 """
@@ -49,6 +60,55 @@ PREF_FILES = (
 SCHEMA_FILE = "browser/components/enterprisepolicies/schemas/policies-schema.json"
 VERSION_FILE = "browser/config/version.txt"
 UBO_ID = "uBlock0@raymondhill.net"
+UBO_AMO_URL = "https://addons.mozilla.org/firefox/downloads/latest/uBlock0@raymondhill.net/latest.xpi"
+CONSENT_VAR = "ORBIS_UBO_CONSENT_SCREENS"
+SILENT_INSTALL_MODES = ("force_installed", "normal_installed")
+# Policies that lock browser.aboutwelcome.enabled to false (Policies.sys.mjs), which removes the consent screen.
+# With a full checkout, check_consent_source() also finds any other policy that touches that pref.
+WELCOME_OFF_POLICIES = ("OverrideFirstRunPage", "DisableAccounts", "DisableFirefoxAccounts")
+# orbis.cfg locks the consent screen depends on (values as written in orbis.cfg).
+CONSENT_LOCKS = (
+    ("browser.aboutwelcome.enabled", "true"),
+    ("startup.homepage_welcome_url", "\"about:welcome\""),
+    ("startup.homepage_welcome_url.additional", "\"\""),
+    ("browser.aboutwelcome.experimentsGate.enabled", "false"),
+    # Otherwise about:welcome asks services.addons.mozilla.org for language packs before consent.
+    ("intl.multilingual.aboutWelcome.languageMismatchEnabled", "false"),
+    # Otherwise about:welcome runs the attribution (Store campaign) action before consent.
+    ("trailhead.firstrun.didHandleCampaignAction", "true"),
+)
+# What the consent screen needs from the pinned source: (file, strings that must be in it). If Firefox drops or
+# renames one, about:welcome may ignore Orbis's screens and show Mozilla's onboarding, or skip the consent logic.
+CONSENT_SOURCE = (
+    ("browser/components/aboutwelcome/content/aboutwelcome.bundle.js",
+     ("checkedAction", "uncheckedAction", "uncheckedNotice", "collectSelect", "AWGetUnhandledCampaignAction")),
+    ("toolkit/components/messaging-system/lib/SpecialMessageActions.sys.mjs",
+     ('case "INSTALL_ADDON_FROM_URL"', 'case "OPEN_ABOUT_PAGE"', 'case "SET_PREF"', 'case "MULTI_ACTION"',
+      "orderedExecution", "messaging-system-action.")),
+    ("browser/components/aboutwelcome/actors/AboutWelcomeChild.sys.mjs",
+     ("featureConfig.languageMismatchEnabled",)),
+    ("browser/components/aboutwelcome/actors/AboutWelcomeParent.sys.mjs",
+     ('"trailhead.firstrun.didHandleCampaignAction"',)),
+    ("browser/components/BrowserContentHandler.sys.mjs",
+     # Re-asking relies on: an empty saved milestone means a new profile, which opens the welcome page.
+     ("return savedmstone ? OVERRIDE_NEW_MSTONE : OVERRIDE_NEW_PROFILE", '"startup.homepage_welcome_url"',
+      '"browser.startup.homepage_override.mstone"')),
+    ("browser/components/shell/ShellService.sys.mjs",
+     # A repeated ask turns the first-run Start-menu pin off with this pref.
+     ('"browser.shell.disableStartMenuPin"',)),
+    ("browser/locales/en-US/browser/appmenu.ftl",
+     # The decline notice names this menu.
+     (".label = Extensions and Themes",)),
+    ("toolkit/components/nimbus/FeatureManifest.yaml",
+     ("fallbackPref: browser.aboutwelcome.screens",
+      "fallbackPref: intl.multilingual.aboutWelcome.languageMismatchEnabled")),
+)
+SMA_FILE = "toolkit/components/messaging-system/lib/SpecialMessageActions.sys.mjs"
+# Orbis's own prefs: "orbis.*", and the consent choice, which Firefox's SET_PREF stores under its own prefix.
+OWN_PREFIXES = ("orbis.", "messaging-system-action.orbis.")
+CONSENT_CHOICE_PREF = "orbis.ubo.consent"
+MSTONE_PREF = "browser.startup.homepage_override.mstone"
+POLICIES_CODE = "browser/components/enterprisepolicies/Policies.sys.mjs"
 
 # Code search (full checkout only): folders that hold product code, and file types that read prefs.
 CODE_DIRS = ("browser", "toolkit", "services", "netwerk", "modules", "dom", "security", "extensions",
@@ -329,6 +389,167 @@ class Validator:
 
 
 # --------------------------------------------------------------------------------------------------
+# uBlock Origin consent (Store policy 10.1.5)
+# --------------------------------------------------------------------------------------------------
+
+def find_installs(node, path="screens"):
+    """Every (path, action) in node whose type is INSTALL_ADDON_FROM_URL."""
+    found = []
+    if isinstance(node, dict):
+        if node.get("type") == "INSTALL_ADDON_FROM_URL":
+            found.append((path, node))
+        for k, v in node.items():
+            found += find_installs(v, "%s.%s" % (path, k))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            found += find_installs(v, "%s[%d]" % (path, i))
+    return found
+
+
+def check_consent_source(source, full_checkout, policies):
+    """Fails if the pinned source no longer has what the consent screen uses, or if a policy in policies.json
+    touches browser.aboutwelcome.enabled. Needs a full checkout; reported as not checked otherwise."""
+    if not full_checkout:
+        print("REVIEW: consent screen not checked against the Firefox code (no full checkout)")
+        return
+    for rel, needles in CONSENT_SOURCE:
+        path = os.path.join(source, rel)
+        if not os.path.isfile(path):
+            fail("consent screen: %s is missing from the source" % rel)
+            continue
+        text = read_text(path)
+        for n in needles:
+            # Whole names only: "uncheckedActionX" must not count as "uncheckedAction".
+            if not re.search(r"(?<![\w$])%s(?![\w])" % re.escape(n), text):
+                fail("consent screen: %r is no longer in %s" % (n, rel))
+    m = re.search(r"const ALLOWED_ABOUT_PAGES = new Set\(\[(.*?)\]\)", read_text(os.path.join(source, SMA_FILE)),
+                  re.S)
+    if not m or not re.search(r"[\"']home[\"']", m.group(1)):
+        fail("consent screen: OPEN_ABOUT_PAGE no longer allows about:home (ALLOWED_ABOUT_PAGES in %s)" % SMA_FILE)
+    touching, current = set(), None
+    for line in read_text(os.path.join(source, POLICIES_CODE)).splitlines():
+        mm = re.match(r"  ([A-Za-z0-9_]+): \{", line)
+        if mm:
+            current = mm.group(1)
+        elif current and "browser.aboutwelcome.enabled" in line:
+            touching.add(current)
+    for p in sorted(touching - set(WELCOME_OFF_POLICIES) - {"UserMessaging"}):
+        print("REVIEW: policy %s also sets browser.aboutwelcome.enabled (%s)" % (p, POLICIES_CODE))
+    for p in sorted(touching & set(policies)):
+        if p == "UserMessaging" and not policies[p].get("SkipOnboarding"):
+            continue
+        fail("policy %s sets browser.aboutwelcome.enabled (%s): the consent screen may not show"
+             % (p, POLICIES_CODE))
+
+
+def check_ubo_consent(cfg_text, calls, policies):
+    """Fails unless uBlock Origin is installed only through the first-run consent screen."""
+    for eid, s in policies.get("ExtensionSettings", {}).items():
+        if isinstance(s, dict) and s.get("installation_mode") in SILENT_INSTALL_MODES:
+            fail("ExtensionSettings.%s: %s installs it without the user's consent (Store policy 10.1.5)"
+                 % (eid, s["installation_mode"]))
+    if policies.get("Extensions", {}).get("Install"):
+        fail("Extensions.Install installs add-ons without the user's consent (Store policy 10.1.5)")
+    for p in WELCOME_OFF_POLICIES:
+        if p in policies:
+            fail("policy %s locks browser.aboutwelcome.enabled to false: the uBlock Origin consent screen "
+                 "would not show" % p)
+    if policies.get("UserMessaging", {}).get("SkipOnboarding"):
+        fail("UserMessaging.SkipOnboarding switches about:welcome off: the uBlock Origin consent screen "
+             "would not show")
+
+    locked = {name: (val or "").strip() for fn, name, val, _ in calls if fn == "lockPref"}
+    for name, want in CONSENT_LOCKS + (("browser.aboutwelcome.screens", "JSON.stringify(%s" % CONSENT_VAR),):
+        if locked.get(name) != want:
+            fail("orbis.cfg: %s must be locked to %s%s" % (name, want, ")" if "(" in want else ""))
+
+    m = re.search(r"^var %s = (\[.*?^\]);" % CONSENT_VAR, cfg_text, re.M | re.S)
+    if not m:
+        fail("orbis.cfg: no 'var %s = [...];' block" % CONSENT_VAR)
+        return
+    try:
+        screens = json.loads(m.group(1))
+    except ValueError as e:
+        fail("orbis.cfg: %s is not strict JSON: %s" % (CONSENT_VAR, e))
+        return
+    installs = find_installs(screens)
+    if len(installs) != 1:
+        fail("%s: %d INSTALL_ADDON_FROM_URL actions; exactly one (uBlock Origin) is allowed"
+             % (CONSENT_VAR, len(installs)))
+        return
+    path, action = installs[0]
+    if action.get("data", {}).get("url") != UBO_AMO_URL:
+        fail("%s: the install URL must be %s" % (CONSENT_VAR, UBO_AMO_URL))
+    first = screens[0].get("content", {}) if screens else {}
+    tiles = first.get("tiles", {})
+    items = tiles.get("data", []) if tiles.get("type") == "multiselect" else []
+    owner = [i for i, item in enumerate(items) if find_installs(item.get("checkedAction"))]
+    if not re.fullmatch(r"screens\[0\]\.content\.tiles\.data\[\d+\]\.checkedAction(\..*)?", path) or not owner:
+        fail("%s: the install is at %s; it must be in the checkedAction of a checkbox on the first screen"
+             % (CONSENT_VAR, path))
+        return
+    item = items[owner[0]]
+    if item.get("defaultValue") is not True or item.get("type", "checkbox") != "checkbox":
+        fail("%s: the uBlock Origin item must be a checkbox with defaultValue true" % CONSENT_VAR)
+    button = first.get("primary_button", {}).get("action", {})
+    if not (button.get("type") == "MULTI_ACTION" and button.get("collectSelect") is True):
+        fail("%s: the first screen's button must be a MULTI_ACTION with collectSelect" % CONSENT_VAR)
+    if find_installs(button):
+        fail("%s: the first screen's button must not install anything itself" % CONSENT_VAR)
+    if not (button.get("navigate") is True and len(screens) >= 2):
+        fail("%s: the first screen must navigate to a second screen; leaving about:welcome would cancel the "
+             "install while Firefox's permission prompt is open" % CONSENT_VAR)
+
+    # The answer is recorded, and "ask again" reads the same pref and values.
+    def set_prefs(action):
+        found = []
+        if isinstance(action, dict):
+            if action.get("type") == "SET_PREF":
+                p = action.get("data", {}).get("pref", {})
+                found.append((p.get("name"), p.get("value")))
+            for v in action.values():
+                found += set_prefs(v)
+        elif isinstance(action, list):
+            for v in action:
+                found += set_prefs(v)
+        return found
+    for key, value in (("checkedAction", "accepted"), ("uncheckedAction", "declined")):
+        if (CONSENT_CHOICE_PREF, value) not in set_prefs(item.get(key)):
+            fail("%s: %s must SET_PREF %s to %r" % (CONSENT_VAR, key, CONSENT_CHOICE_PREF, value))
+    stored = "messaging-system-action." + CONSENT_CHOICE_PREF
+    # Ask again until settled (Shibi, 2026-11-12): only "declined" or an installed uBlock Origin (now or at an
+    # earlier start) stops it; "accepted" alone must not, since the install may never have happened.
+    rearm = re.search(r"getPref\(\"%s\"\)(.*?)clearPref\(\"%s\"\)" % (re.escape(stored), re.escape(MSTONE_PREF)),
+                      cfg_text, re.S)
+    block = rearm.group(1) if rearm else ""
+    if not rearm or "\"declined\"" not in block or UBO_ID not in block or \
+            "getPref(\"orbis.ubo.seenInstalled\") !== true" not in block:
+        fail("orbis.cfg: no 'ask again' block: it must read %s and clearPref(%s) unless the value is declined or "
+             "uBlock Origin is or was installed (Shibi, 2026-11-12)" % (stored, MSTONE_PREF))
+    elif "\"accepted\"" in block:
+        fail("orbis.cfg: the 'ask again' block must not stop on \"accepted\": accepted without an install is asked "
+             "again (Shibi, 2026-11-12)")
+    # A repeated ask must not re-pin the MSIX to the Start menu. The guard keys on a saved marker, not on the
+    # milestone: a start with a URL leaves the milestone cleared, so the next plain start would look like the
+    # real first run (Fable's review of PR #9).
+    if not re.search(r"if \(getPref\(\"orbis\.firstRunDone\"\) === true\) \{\s*(//[^\n]*\n\s*)*"
+                     r"defaultPref\(\"browser\.shell\.disableStartMenuPin\", true\);", block):
+        fail("orbis.cfg: the 'ask again' block must set defaultPref(browser.shell.disableStartMenuPin, true) when "
+             "orbis.firstRunDone is true (no Start-menu re-pin on a repeated ask)")
+    marker = re.search(r"if \(getPref\(\"%s\"\)\) \{\s*pref\(\"orbis\.firstRunDone\", true\);"
+                       % re.escape(MSTONE_PREF), cfg_text)
+    if not marker or (rearm and marker.start() > rearm.start()):
+        fail("orbis.cfg: set orbis.firstRunDone to true when %s has a value, before the 'ask again' block clears it"
+             % MSTONE_PREF)
+    # The decline notice must say plainly that phishing and malware protection is off (Shibi, 2026-11-12), and
+    # name the menu as Firefox 160 does (appmenu.ftl, menubar.ftl).
+    notice = json.dumps(item.get("uncheckedNotice", {}))
+    for words in ("phishing and malware protection is off", "Google Safe Browsing", "Extensions and Themes"):
+        if words not in notice:
+            fail("%s: the unchecked notice must say %r" % (CONSENT_VAR, words))
+
+
+# --------------------------------------------------------------------------------------------------
 
 def main():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -394,8 +615,8 @@ def main():
 
     all_calls = [("orbis.cfg", c) for c in calls] + [("autoconfig.js", c) for c in loader_calls]
     names = sorted({c[1] for _, c in all_calls})
-    own = [n for n in names if n.startswith("orbis.")]
-    missing = [n for n in names if n not in defs and not n.startswith("orbis.")]
+    own = [n for n in names if n.startswith(OWN_PREFIXES)]
+    missing = [n for n in names if n not in defs and not n.startswith(OWN_PREFIXES)]
     code_refs = {}
     if missing and full_checkout:
         print("Searching the Firefox code for %d pref name(s) not in the pref files..." % len(missing))
@@ -403,7 +624,7 @@ def main():
 
     where = {}
     for n in names:
-        if n.startswith("orbis."):
+        if n.startswith(OWN_PREFIXES):
             where[n] = "Orbis's own pref"
         elif n in defs:
             d = defs[n]
@@ -447,6 +668,9 @@ def main():
         v.compat(schema["properties"][pname], pname)
         for e in v.errors(pval, schema["properties"][pname], pname):
             fail("policy " + e)
+
+    check_ubo_consent("\n".join(cfg_lines), calls, policies)
+    check_consent_source(source, full_checkout, policies)
 
     # ---- docs/SETTINGS.md ------------------------------------------------------------------------
     doc = read_text(args.settings_doc)

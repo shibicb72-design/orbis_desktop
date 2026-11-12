@@ -3,7 +3,6 @@
     "DisableTelemetry": true,
     "DisableFirefoxStudies": true,
     "DisableRemoteImprovements": true,
-    "DisableAccounts": true,
     "IPProtectionAvailable": false,
     "DisableAppUpdate": true,
     "DisableSystemAddonUpdate": true,
@@ -11,7 +10,6 @@
     "DontCheckDefaultBrowser": true,
     "DisableFeedbackCommands": true,
     "SkipTermsOfUse": true,
-    "OverrideFirstRunPage": "",
     "OverridePostUpdatePage": "",
     "NoDefaultBookmarks": true,
     "FirefoxHome": {
@@ -32,7 +30,6 @@
       "ExtensionRecommendations": false,
       "FeatureRecommendations": false,
       "UrlbarInterventions": false,
-      "SkipOnboarding": true,
       "MoreFromMozilla": false,
       "FirefoxLabs": false,
       "Locked": true
@@ -77,8 +74,7 @@
         "allowed_types": ["extension", "theme", "dictionary", "sitepermission"]
       },
       "uBlock0@raymondhill.net": {
-        "installation_mode": "normal_installed",
-        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/uBlock0@raymondhill.net/latest.xpi",
+        "installation_mode": "allowed",
         "private_browsing": true
       }
     },
