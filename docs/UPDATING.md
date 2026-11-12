@@ -78,10 +78,12 @@ the tag points at the pinned commit.
    python -I scripts\verify-build.py consent <install> <out>\close-de close  --system-locale de-DE
    python -I scripts\verify-build.py consent <install> <out>\early   early
    python -I scripts\verify-build.py consent <install> <out>\cancel  cancel
+   python -I scripts\verify-build.py consent <install> <out>\url     url
    ```
 
    All must end with `"result": "PASS"`. The `de-DE` runs simulate a Windows that is not in English, where
-   `about:welcome` would otherwise offer a language pack from addons.mozilla.org. `close`, `early` and `cancel`
+   `about:welcome` would otherwise offer a language pack from addons.mozilla.org. `url` checks that a start with
+   a URL in between does not re-enable the Start-menu pin. `close`, `early`, `cancel` and `url`
    check that the screen comes back at the next start while uBlock Origin is neither declined nor installed. That
    relies on two things: Firefox treats an empty `browser.startup.homepage_override.mstone` as a new profile, and
    `browser.shell.disableStartMenuPin` stops the Start-menu re-pin. No release without them: a changed

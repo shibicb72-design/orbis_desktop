@@ -96,6 +96,9 @@ CONSENT_SOURCE = (
     ("browser/components/shell/ShellService.sys.mjs",
      # A repeated ask turns the first-run Start-menu pin off with this pref.
      ('"browser.shell.disableStartMenuPin"',)),
+    ("browser/locales/en-US/browser/appmenu.ftl",
+     # The decline notice names this menu.
+     (".label = Extensions and Themes",)),
     ("toolkit/components/nimbus/FeatureManifest.yaml",
      ("fallbackPref: browser.aboutwelcome.screens",
       "fallbackPref: intl.multilingual.aboutWelcome.languageMismatchEnabled")),
@@ -526,12 +529,22 @@ def check_ubo_consent(cfg_text, calls, policies):
     elif "\"accepted\"" in block:
         fail("orbis.cfg: the 'ask again' block must not stop on \"accepted\": accepted without an install is asked "
              "again (Shibi, 2026-11-12)")
-    if not re.search(r"defaultPref\(\"browser\.shell\.disableStartMenuPin\", true\)", block):
-        fail("orbis.cfg: a repeated ask must not re-pin the MSIX to the Start menu "
-             "(defaultPref browser.shell.disableStartMenuPin true in the 'ask again' block)")
-    # The decline notice must say plainly that phishing and malware protection is off (Shibi, 2026-11-12).
+    # A repeated ask must not re-pin the MSIX to the Start menu. The guard keys on a saved marker, not on the
+    # milestone: a start with a URL leaves the milestone cleared, so the next plain start would look like the
+    # real first run (Fable's review of PR #9).
+    if not re.search(r"if \(getPref\(\"orbis\.firstRunDone\"\) === true\) \{\s*(//[^\n]*\n\s*)*"
+                     r"defaultPref\(\"browser\.shell\.disableStartMenuPin\", true\);", block):
+        fail("orbis.cfg: the 'ask again' block must set defaultPref(browser.shell.disableStartMenuPin, true) when "
+             "orbis.firstRunDone is true (no Start-menu re-pin on a repeated ask)")
+    marker = re.search(r"if \(getPref\(\"%s\"\)\) \{\s*pref\(\"orbis\.firstRunDone\", true\);"
+                       % re.escape(MSTONE_PREF), cfg_text)
+    if not marker or (rearm and marker.start() > rearm.start()):
+        fail("orbis.cfg: set orbis.firstRunDone to true when %s has a value, before the 'ask again' block clears it"
+             % MSTONE_PREF)
+    # The decline notice must say plainly that phishing and malware protection is off (Shibi, 2026-11-12), and
+    # name the menu as Firefox 160 does (appmenu.ftl, menubar.ftl).
     notice = json.dumps(item.get("uncheckedNotice", {}))
-    for words in ("phishing and malware protection is off", "Google Safe Browsing", "Add-ons and themes"):
+    for words in ("phishing and malware protection is off", "Google Safe Browsing", "Extensions and Themes"):
         if words not in notice:
             fail("%s: the unchecked notice must say %r" % (CONSENT_VAR, words))
 

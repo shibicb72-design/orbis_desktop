@@ -21,7 +21,7 @@ Phases:
            loses nothing) and TCP sampling of the started process tree (f-tcp.json); then prefs, policies,
            about:policies and uBlock Origin (checks-idle.json, aboutpolicies-idle.json/.png). Nobody answers
            the first-run consent screen here, so uBlock Origin must not be installed.
-  consent  First-run uBlock Origin consent screen (EXTRA = accept, decline, close, early or cancel). New profile,
+  consent  First-run uBlock Origin consent screen (EXTRA = accept, decline, close, early, cancel, url). New profile,
            headless, with the same DNS log. Before the answer: about:welcome shows the screen with the checkbox
            on, and there is no uBlock Origin, no add-on install and no addons.mozilla.org lookup. accept:
            Continue with the checkbox on, accept Firefox's permission prompt; uBlock Origin is installed and its
@@ -30,7 +30,9 @@ Phases:
            Origin, no install and no addons.mozilla.org lookup in the whole DNS log. close: leave the screen
            and quit without answering. early: Continue with the checkbox on, then "Start browsing" before
            Firefox's Add prompt is answered. cancel: Continue with the checkbox on, then Cancel in that prompt.
-           close, early and cancel leave no uBlock Origin, so the next start must show the screen again
+           url: like close, then a start with a URL on the command line (the screen moves to the next plain
+           start; the Start-menu pin stays off). close, early, cancel and url leave no uBlock Origin, so the
+           next plain start must show the screen again
            (without re-pinning the MSIX to the Start menu), where it is declined. accept: uBlock Origin is
            removed again in a later start, which must not bring the question back. All: the choice pref is
            recorded, and two later starts of the same profile do not show the screen again.
@@ -82,7 +84,7 @@ def parse_args():
     ap.add_argument("install_dir")
     ap.add_argument("out_dir")
     ap.add_argument("extra", nargs="?",
-                    help="consent: accept, decline, close, early or cancel; second: the profile folder; quit: the Marionette port")
+                    help="consent: accept, decline, close, early, cancel or url; second: the profile folder; quit: the Marionette port")
     ap.add_argument("--source", default=os.path.join(home, "orbis_desktop_src", "firefox"))
     ap.add_argument("--profiles", default=os.path.join(home, "orbis_desktop_src", "test-profiles"))
     ap.add_argument("--system-locale", default=None,
@@ -160,7 +162,7 @@ def tree_state():
     return res
 
 
-def launch(profile, port, headless=True, extra_env=None, no_profile=False, extra_prefs=None):
+def launch(profile, port, headless=True, extra_env=None, no_profile=False, extra_prefs=None, urls=None):
     env = dict(os.environ)
     env["MOZ_REMOTE_ALLOW_SYSTEM_ACCESS"] = "1"
     for k in ("XRE_PROFILE_PATH", "MOZ_HEADLESS"):
@@ -179,6 +181,7 @@ def launch(profile, port, headless=True, extra_env=None, no_profile=False, extra
             for k, v in (extra_prefs or {}).items():
                 f.write("user_pref(%s, %s);\n" % (json.dumps(k), json.dumps(v)))
         args += ["-profile", profile, "--new-instance"]
+    args += urls or []
     log("launch:", args)
     return subprocess.Popen(args, env=env)
 
@@ -484,6 +487,7 @@ const [ubo, pref, done] = [arguments[0], arguments[1], arguments[arguments.lengt
       url: i.sourceURI && i.sourceURI.spec, state: i.state, error: i.error}));
     out.choice = Services.prefs.getPrefType(pref) ? Services.prefs.getStringPref(pref) : null;
     out.seenInstalled = Services.prefs.getBoolPref("orbis.ubo.seenInstalled", false);
+    out.firstRunDone = Services.prefs.getBoolPref("orbis.firstRunDone", false);
     // true only on a repeated ask: Firefox must not re-pin the MSIX to the Start menu then.
     out.startMenuPinOff = Services.prefs.getBoolPref("browser.shell.disableStartMenuPin", false);
     out.tabs = [];
@@ -572,9 +576,11 @@ def switch_to_welcome(m):
     return False
 
 
-CONSENT_CHOICES = ("accept", "decline", "close", "early", "cancel")
+CONSENT_CHOICES = ("accept", "decline", "close", "early", "cancel", "url")
 # Choices that leave the question unsettled, so the next start must ask again.
-ASK_AGAIN_CHOICES = ("close", "early", "cancel")
+ASK_AGAIN_CHOICES = ("close", "early", "cancel", "url")
+# A local page for the "url" case: a start with a URL on the command line, as when another app opens a link.
+URL_START_PAGE = "about:logo"
 
 
 def welcome_open(m):
@@ -607,8 +613,8 @@ def decline_on_screen(m, res, ok, box, shot):
     res["screenTextUnchecked"] = text = m.execute_script("return document.body.innerText")
     ok["uncheckedByClick"] = box.is_selected() is False
     ok["warnsNoPhishingMalwareProtection"] = all(
-        s in text for s in ("phishing and malware", "Google Safe Browsing", "Strict tracking protection stays on",
-                            "Add-ons and themes"))
+        s in text for s in ("phishing and malware", "Google Safe Browsing", "Tracking protection is not affected",
+                            "Extensions and Themes"))
     with open(os.path.join(OUT, shot), "wb") as f:
         f.write(m.screenshot(format="binary"))
     m.find_element("css selector", "button.primary").click()
@@ -619,7 +625,8 @@ def phase_consent():
     """accept, decline: answer on the first start. close: leave the screen and quit without answering. early:
     Continue with the box checked, then "Start browsing" at once, before Firefox's Add prompt is answered.
     cancel: Continue with the box checked, then Cancel in Firefox's prompt. close, early and cancel leave the
-    question unsettled: the next start must show the screen again (and must not re-pin the MSIX to the Start
+    question unsettled: the next start must show the screen again. url: like close, then a start with a URL
+    (no screen, Start-menu pin still off), then a plain start that must show the screen (and must not re-pin the MSIX to the Start
     menu); it is declined there. accept: in the first later start uBlock Origin is removed again. All: the two
     later starts must not show the screen."""
     choice = ARGS.extra
@@ -643,8 +650,8 @@ def phase_consent():
         box = check_screen(m, res, ok, "first")
         if choice == "decline":
             decline_on_screen(m, res, ok, box, "consent-decline-screen.png")
-        elif choice == "close":
-            with open(os.path.join(OUT, "consent-close-screen.png"), "wb") as f:
+        elif choice in ("close", "url"):
+            with open(os.path.join(OUT, "consent-%s-screen.png" % choice), "wb") as f:
                 f.write(m.screenshot(format="binary"))
             m.navigate("about:blank")  # the user leaves the screen without answering ...
             time.sleep(2)
@@ -714,8 +721,24 @@ def phase_consent():
     finally:
         stop_browser(proc, m)
 
+    if choice == "url":
+        # A start with a URL skips Firefox's first-window logic: the screen is not shown and the milestone that
+        # orbis.cfg cleared is not saved again. The Start-menu pin must stay off here and at the next plain start.
+        proc = m = None
+        try:
+            proc = launch(prof, 28284, headless=True, extra_prefs=prefs, urls=[URL_START_PAGE],
+                          extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5",
+                                     "MOZ_LOG_FILE": os.path.join(OUT, "dns.log.urlstart")})
+            m = connect(28284)
+            time.sleep(10)
+            st = res["urlStart"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            res["urlStartShowedScreen"] = any(t.startswith("about:welcome") for t in st["tabs"])
+            ok["urlStartOpensUrl"] = URL_START_PAGE in st["tabs"]
+            ok["noStartMenuRepinOnUrlStart"] = st["startMenuPinOff"] is True
+        finally:
+            stop_browser(proc, m)
     if choice in ASK_AGAIN_CHOICES:
-        # Orbis starts again: the screen must come back. Answer it this time (decline).
+        # Orbis starts again (plain start): the screen must come back. Answer it this time (decline).
         prev_choice = (res.get("after") or {}).get("choice")
         amo_base = amo_lookups(dns_hosts(OUT))
         proc = m = None
@@ -739,7 +762,7 @@ def phase_consent():
     res["dnsHosts"] = dict(sorted(hosts.items()))
     if choice == "accept":
         ok["amoLookupAfterConsent"] = hosts.get(AMO_HOST, 0) > 0
-    elif choice in ("decline", "close"):
+    elif choice in ("decline", "close", "url"):
         ok["noAmoLookup"] = amo_lookups(hosts) == 0
     # Later starts of the same profile: after an answer the screen must never come back.
     res["laterStarts"] = []

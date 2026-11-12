@@ -168,6 +168,7 @@ python -I scripts\verify-build.py consent $inst $out\close   close    # left una
 python -I scripts\verify-build.py consent $inst $out\close-de close --system-locale de-DE
 python -I scripts\verify-build.py consent $inst $out\early   early    # "Start browsing" before Firefox's Add
 python -I scripts\verify-build.py consent $inst $out\cancel  cancel   # "Cancel" in Firefox's Add prompt
+python -I scripts\verify-build.py consent $inst $out\url     url      # unanswered, then a start with a URL
 python -I scripts\verify-build.py second  $inst $out\second <profile folder printed by the consent accept phase>
 python -I scripts\verify-build.py ui      $inst $out\ui       # window titles, new tab, About dialog
 ```
@@ -193,8 +194,10 @@ The script's header lists every output file. What to compare:
   - close: the screen is left and Orbis quit without an answer, so no choice is recorded;
   - early: "Start browsing" before Firefox's Add prompt; cancel: "Cancel" in that prompt. Both leave no uBlock
     Origin, and the choice is `accepted`;
-  - close, early, cancel: the screen is back at the next start, where `browser.shell.disableStartMenuPin` is true
-    (no MSIX Start-menu re-pin; it was false on the real first run), and is declined there;
+  - url: like close, then a start with `about:logo` on the command line, which opens that page and keeps
+    `browser.shell.disableStartMenuPin` true;
+  - close, early, cancel, url: the screen is back at the next plain start, where `browser.shell.disableStartMenuPin`
+    is true (no MSIX Start-menu re-pin; it was false on the real first run), and is declined there;
   - all choices: two later starts do not show the screen. Any host ending in
   `addons.mozilla.org` counts. The `--system-locale de-DE` runs set `intl.multilingual.aboutWelcome.systemLocaleOverride`
   in the test profile, so `about:welcome` sees a Windows language that differs from Orbis's; without the

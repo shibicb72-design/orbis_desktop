@@ -279,12 +279,25 @@ How it works:
 - An installed uBlock Origin has its ID in `extensions.webextensions.uuids`, so a user who added it by hand is not
   asked either.
 
+Edge cases (Fable's final review):
+- **Installed and removed in the same session:** `orbis.cfg` only sees add-ons at start, so it never sees that
+  uBlock Origin was installed. If the question was not settled before, the screen shows once more at the next
+  start.
+- **A start with a URL** (for example a link opened from another app) skips Firefox's first-window logic. The
+  screen is not shown, and the milestone that `orbis.cfg` cleared is not saved again. The re-ask moves to the next
+  plain start (`verify-build.py consent url`).
+
 First-run side effects on a repeated ask, read in the source:
 - **Start menu (MSIX):** Firefox pins Orbis to the Start menu on a first run if it is not pinned
-  (`StartupOSIntegration.maybePinMSIXToStartMenu`). Limited to the real first run: on a repeated ask (the profile
-  already has a saved milestone), `orbis.cfg` sets `browser.shell.disableStartMenuPin` to true on the default
-  branch for that start only. Firefox 160's `ShellService.doesAppNeedStartMenuPin` then returns false. A user who
-  unpinned Orbis is not re-pinned. Tested as a pref value only; the MSIX pin itself was not run.
+  (`StartupOSIntegration.maybePinMSIXToStartMenu`). Limited to the real first run:
+  - `orbis.cfg` sets `orbis.firstRunDone` once Firefox has saved a milestone, meaning its first window has run.
+  - On a repeated ask with that marker, it sets `browser.shell.disableStartMenuPin` to true on the default branch
+    for that start only. Firefox 160's `ShellService.doesAppNeedStartMenuPin` then returns false, so a user who
+    unpinned Orbis is not re-pinned.
+  - The marker is needed because the milestone alone is not enough. A start with a URL leaves it cleared, and the
+    next plain start would then look like the real first run and pin again. Fable found this; the `url` test case
+    failed with the previous `orbis.cfg` and passes now.
+  - Tested as a pref value only; the MSIX pin itself was not run.
 - **Import button:** Firefox may add the "Import bookmarks" button to the bookmarks toolbar
   (`PlacesBrowserStartup.maybeAddImportButton`) when the toolbar has fewer than 3 bookmarks. No pref turns that
   off; only the `DisableProfileImport` policy would, and it also removes browser import. Not limited: if the user
@@ -299,8 +312,9 @@ The screens (`ORBIS_UBO_CONSENT_SCREENS` in `orbis.cfg`; text from Android's `ub
    Origin downloads its own filter lists; Orbis chooses those lists at every start), one checkbox **"Install
    uBlock Origin ad blocker", on by default**, and a **Continue** button. Unchecked, the screen shows a warning
    (Shibi, 2026-11-12): "Without uBlock Origin, phishing and malware protection is off. Orbis does not use Google
-   Safe Browsing. Its protection against phishing and malware sites comes from uBlock Origin's filter lists. Strict
-   tracking protection stays on. You can add uBlock Origin later in Add-ons and themes."
+   Safe Browsing. Its protection against phishing and malware sites comes from uBlock Origin's filter lists. Tracking
+   protection is not affected. You can add uBlock Origin later in Extensions and Themes." (Firefox 160's name for
+   the menu item, `appmenu.ftl` and `menubar.ftl`; `about:addons`.)
 2. Checkbox on: Continue records `accepted`, starts the download from addons.mozilla.org
    (`INSTALL_ADDON_FROM_URL`, the same AMO URL the policy used) and shows "Installing uBlock Origin...". Firefox
    then shows its own "Add uBlock Origin?" prompt with the add-on's permissions; "Add" installs it. "Start
@@ -311,7 +325,7 @@ The screens (`ORBIS_UBO_CONSENT_SCREENS` in `orbis.cfg`; text from Android's `ub
    the next start, because uBlock Origin is not installed.
 3. Checkbox off: Continue records `declined` and opens the home page. Nothing is downloaded.
 
-Later installs: Add-ons and themes (`about:addons`) search, or addons.mozilla.org. `ExtensionSettings` allows
+Later installs: Extensions and Themes (`about:addons`) search, or addons.mozilla.org. `ExtensionSettings` allows
 uBlock Origin and keeps it working in private windows, and the `3rdparty` lists apply to any install.
 
 | Pref | Value | Locked? | Reason | Source |
@@ -326,7 +340,8 @@ uBlock Origin and keeps it working in private windows, and the `3rdparty` lists 
 | `messaging-system-action.orbis.ubo.consent` | `"accepted"` or `"declined"` | Written once by the screen; not set by `orbis.cfg` | Records the answer on the screen (for checks and support). **It is not proof that uBlock Origin is installed:** after `accepted` the user can still refuse Firefox's prompt or leave the page before it, the download can fail, and the user can install or remove uBlock Origin later. Ask the Add-ons Manager for the install state. The screen asks for `orbis.ubo.consent`; Firefox's `SET_PREF` action adds the `messaging-system-action.` prefix to every pref outside its allow-list. Not set if the user closes the window or leaves the screen without answering. Only `declined` settles the question by itself; `accepted` settles it only once uBlock Origin is installed (see "Asked again until settled") | Orbis's own pref |
 | `orbis.ubo.seenInstalled` | true, set once | Set by `orbis.cfg` at a start where uBlock Origin is installed | Records that uBlock Origin was installed once, so a user who removes it later is not asked again | Orbis's own pref |
 | `browser.startup.homepage_override.mstone` | cleared (user value removed) while the question is not settled | Not locked; Firefox sets it again at every start | Makes Firefox treat the start as a first run, which opens `about:welcome` again (see "Asked again until settled" above). Never touched once settled | code: browser/components/BrowserContentHandler.sys.mjs |
-| `browser.shell.disableStartMenuPin` | true on the default branch, for a repeated ask only | Default, not saved; only for that start | A repeated ask is a first run for Firefox, which would pin the MSIX to the Start menu again if the user unpinned it. Only the real first run of a profile may pin | code: browser/components/shell/ShellService.sys.mjs |
+| `browser.shell.disableStartMenuPin` | true on the default branch, for a repeated ask after the real first run (`orbis.firstRunDone`) | Default, not saved; only for that start | A repeated ask is a first run for Firefox, which would pin the MSIX to the Start menu again if the user unpinned it. Only the real first run of a profile may pin | code: browser/components/shell/ShellService.sys.mjs |
+| `orbis.firstRunDone` | true, set once | Set by `orbis.cfg` at a start where `browser.startup.homepage_override.mstone` has a value | Records that Firefox's first window has run once in this profile. The Start-menu guard keys on this marker, not on the milestone, which `orbis.cfg` clears and a start with a URL does not restore | Orbis's own pref |
 | `extensions.webextensions.uuids` | read only | - | `orbis.cfg` reads it to see whether uBlock Origin is installed | code: toolkit/components/extensions/Extension.sys.mjs |
 
 `check-settings.py` also checks the pinned source for everything the screens use (the checkbox actions,
@@ -336,7 +351,8 @@ onboarding instead. `check-settings.py` also fails in these cases:
 - the "ask again" block is missing, or does not depend on `declined`, the uBlock Origin ID and
   `orbis.ubo.seenInstalled`;
 - the "ask again" block stops on `accepted` alone;
-- a repeated ask does not set `browser.shell.disableStartMenuPin`;
+- a repeated ask does not set `browser.shell.disableStartMenuPin` when `orbis.firstRunDone` is true, or
+  `orbis.firstRunDone` is not set from the milestone before the block clears it;
 - the checkbox actions do not record `accepted`/`declined` in the pref that block reads;
 - the unchecked notice does not name the missing phishing and malware protection.
 
