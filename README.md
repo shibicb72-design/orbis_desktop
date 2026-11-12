@@ -31,8 +31,10 @@ is in `docs/SETTINGS.md`.
 ## What leaves your PC
 
 A full list will be in `PRIVACY_POLICY.md` (TODO). In short: the sites you visit, your chosen search engine,
-addons.mozilla.org and filter-list publishers (uBlock Origin), Mozilla (security lists and translation models), and
-the Microsoft Store (updates). Nothing goes to Orbis's developer.
+addons.mozilla.org and filter-list publishers (uBlock Origin), Mozilla (security lists, push service, media
+plugins and translation models), Cisco (the OpenH264 video codec), certificate authorities (revocation checks), and
+the Microsoft Store (updates). Nothing goes to Orbis's developer. Each call and its reason is listed in
+`docs/SETTINGS.md`, "Network calls that remain".
 
 ## How this repository works
 

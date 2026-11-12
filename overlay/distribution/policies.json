@@ -6,6 +6,7 @@
     "DisableAccounts": true,
     "IPProtectionAvailable": false,
     "DisableAppUpdate": true,
+    "DisableSystemAddonUpdate": true,
     "DisableDefaultBrowserAgent": true,
     "DontCheckDefaultBrowser": true,
     "DisableFeedbackCommands": true,
@@ -96,7 +97,9 @@
               "easyprivacy",
               "urlhaus-1",
               "plowe-0",
-              "curben-phishing"
+              "curben-phishing",
+              "fanboy-cookiemonster",
+              "ublock-cookies-easylist"
             ]
           }
         }

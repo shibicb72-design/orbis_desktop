@@ -182,6 +182,27 @@ def search_code(source, names):
 CALL_RE = re.compile(r"\b(lockPref|defaultPref|pref|clearPref|unlockPref|getPref)\(\s*\"([^\"]+)\"\s*(?:,\s*(.*?))?\)")
 
 
+def strip_line_comment(line):
+    """The line without a trailing // comment. A // inside a "..." or '...' string (for example
+    "https://...") is part of the string, not a comment."""
+    quote = None
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+        elif line.startswith("//", i):
+            return line[:i]
+        i += 1
+    return line
+
+
 def parse_cfg_calls(path, skip_first_line):
     """List of (function, name, value literal or None, line number)."""
     calls = []
@@ -189,7 +210,7 @@ def parse_cfg_calls(path, skip_first_line):
     for i, line in enumerate(lines, 1):
         if skip_first_line and i == 1:
             continue
-        code = line.split("//", 1)[0] if not line.lstrip().startswith("//") else ""
+        code = strip_line_comment(line)
         for m in CALL_RE.finditer(code):
             calls.append((m.group(1), m.group(2), m.group(3), i))
     return calls
