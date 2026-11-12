@@ -21,17 +21,19 @@ Phases:
            loses nothing) and TCP sampling of the started process tree (f-tcp.json); then prefs, policies,
            about:policies and uBlock Origin (checks-idle.json, aboutpolicies-idle.json/.png). Nobody answers
            the first-run consent screen here, so uBlock Origin must not be installed.
-  consent  First-run uBlock Origin consent screen (EXTRA = accept, decline, close or early). New profile,
+  consent  First-run uBlock Origin consent screen (EXTRA = accept, decline, close, early or cancel). New profile,
            headless, with the same DNS log. Before the answer: about:welcome shows the screen with the checkbox
            on, and there is no uBlock Origin, no add-on install and no addons.mozilla.org lookup. accept:
            Continue with the checkbox on, accept Firefox's permission prompt; uBlock Origin is installed and its
            selected lists are exactly the 13 lists in policies.json "3rdparty". decline: uncheck (the warning
            about phishing and malware protection must show), Continue; after 60 seconds there is no uBlock
            Origin, no install and no addons.mozilla.org lookup in the whole DNS log. close: leave the screen
-           and quit without answering; the next start must show the screen again, where it is declined. early:
-           Continue with the checkbox on, then "Start browsing" before Firefox's Add prompt is answered; no
-           uBlock Origin, choice "accepted". All: the choice pref is recorded, and two later starts of the same
-           profile do not show the screen again.
+           and quit without answering. early: Continue with the checkbox on, then "Start browsing" before
+           Firefox's Add prompt is answered. cancel: Continue with the checkbox on, then Cancel in that prompt.
+           close, early and cancel leave no uBlock Origin, so the next start must show the screen again
+           (without re-pinning the MSIX to the Start menu), where it is declined. accept: uBlock Origin is
+           removed again in a later start, which must not bring the question back. All: the choice pref is
+           recorded, and two later starts of the same profile do not show the screen again.
            Writes consent-<choice>.json (with a "pass" map and "PASS"/"FAIL"), checks-consent-<choice>.json,
            consent-<choice>-screen.png and the DNS log. "addons.mozilla.org lookup" means any host name ending
            in addons.mozilla.org (also services. and versioncheck-bg.). With --system-locale (for example
@@ -80,7 +82,7 @@ def parse_args():
     ap.add_argument("install_dir")
     ap.add_argument("out_dir")
     ap.add_argument("extra", nargs="?",
-                    help="consent: accept, decline, close or early; second: the profile folder; quit: the Marionette port")
+                    help="consent: accept, decline, close, early or cancel; second: the profile folder; quit: the Marionette port")
     ap.add_argument("--source", default=os.path.join(home, "orbis_desktop_src", "firefox"))
     ap.add_argument("--profiles", default=os.path.join(home, "orbis_desktop_src", "test-profiles"))
     ap.add_argument("--system-locale", default=None,
@@ -481,6 +483,9 @@ const [ubo, pref, done] = [arguments[0], arguments[1], arguments[arguments.lengt
       id: i.addon ? i.addon.id : (i.existingAddon ? i.existingAddon.id : null),
       url: i.sourceURI && i.sourceURI.spec, state: i.state, error: i.error}));
     out.choice = Services.prefs.getPrefType(pref) ? Services.prefs.getStringPref(pref) : null;
+    out.seenInstalled = Services.prefs.getBoolPref("orbis.ubo.seenInstalled", false);
+    // true only on a repeated ask: Firefox must not re-pin the MSIX to the Start menu then.
+    out.startMenuPinOff = Services.prefs.getBoolPref("browser.shell.disableStartMenuPin", false);
     out.tabs = [];
     for (const w of Services.wm.getEnumerator("navigator:browser")) {
       for (const b of w.gBrowser.browsers) out.tabs.push(b.currentURI.spec);
@@ -490,6 +495,23 @@ const [ubo, pref, done] = [arguments[0], arguments[1], arguments[arguments.lengt
     out.permissionPrompt = n ? {message: n.message && String(n.message)} : null;
   } catch (e) { out.error = String(e) + "\n" + e.stack; }
   done(out);
+})();
+"""
+
+CANCEL_PROMPT_JS = r"""
+const done = arguments[arguments.length - 1];
+const n = Services.wm.getMostRecentWindow("navigator:browser").PopupNotifications
+  .getNotification("addon-webext-permissions");
+if (!n) { done(false); } else { n.secondaryActions[0].callback(); done(true); }
+"""
+
+UNINSTALL_UBO_JS = r"""
+const [ubo, done] = [arguments[0], arguments[arguments.length - 1]];
+(async () => {
+  const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+  const a = await AddonManager.getAddonByID(ubo);
+  if (a) { await a.uninstall(); }
+  done(!!a);
 })();
 """
 
@@ -550,7 +572,9 @@ def switch_to_welcome(m):
     return False
 
 
-CONSENT_CHOICES = ("accept", "decline", "close", "early")
+CONSENT_CHOICES = ("accept", "decline", "close", "early", "cancel")
+# Choices that leave the question unsettled, so the next start must ask again.
+ASK_AGAIN_CHOICES = ("close", "early", "cancel")
 
 
 def welcome_open(m):
@@ -560,17 +584,18 @@ def welcome_open(m):
     return st
 
 
-def check_screen(m, res, ok, tag):
-    """Records the unanswered screen: shown, checked by default, no uBlock Origin, no AMO lookup yet."""
+def check_screen(m, res, ok, tag, prev_choice=None, amo_base=0):
+    """Records the unanswered screen: shown, checked by default, no uBlock Origin, no AMO lookup yet. On a
+    repeated ask, prev_choice is the choice already stored and amo_base the AMO lookups of the earlier starts."""
     b = res[tag + "Before"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
-    res[tag + "AmoLookupsBefore"] = amo_lookups(dns_hosts(OUT))
+    res[tag + "AmoLookupsBefore"] = amo_lookups(dns_hosts(OUT)) - amo_base
     if not switch_to_welcome(m):
         raise RuntimeError("no about:welcome tab: %r" % b["tabs"])
     box = m.find_element("css selector", "#orbis-install-ubo")
     res[tag + "ScreenText"] = m.execute_script("return document.body.innerText")
     ok[tag + "ScreenShown"] = "Install uBlock Origin ad blocker" in res[tag + "ScreenText"]
     ok[tag + "CheckedByDefault"] = box.is_selected() is True
-    ok[tag + "NoUboBeforeConsent"] = b["ubo"] is None and not b["installs"] and b["choice"] is None
+    ok[tag + "NoUboBeforeConsent"] = b["ubo"] is None and not b["installs"] and b["choice"] == prev_choice
     ok[tag + "NoAmoBeforeConsent"] = res[tag + "AmoLookupsBefore"] == 0
     return box
 
@@ -591,9 +616,12 @@ def decline_on_screen(m, res, ok, box, shot):
 
 
 def phase_consent():
-    """accept, decline: answer on the first start. close: leave the screen and quit without answering, then the
-    screen must come back; decline it on that second start. early: Continue with the box checked, then "Start
-    browsing" at once, before Firefox's Add prompt is answered. All: a later start must not show the screen."""
+    """accept, decline: answer on the first start. close: leave the screen and quit without answering. early:
+    Continue with the box checked, then "Start browsing" at once, before Firefox's Add prompt is answered.
+    cancel: Continue with the box checked, then Cancel in Firefox's prompt. close, early and cancel leave the
+    question unsettled: the next start must show the screen again (and must not re-pin the MSIX to the Start
+    menu); it is declined there. accept: in the first later start uBlock Origin is removed again. All: the two
+    later starts must not show the screen."""
     choice = ARGS.extra
     if choice not in CONSENT_CHOICES:
         sys.exit("consent: give one of %s as EXTRA" % ", ".join(CONSENT_CHOICES))
@@ -665,6 +693,17 @@ def phase_consent():
             ok["noUboWithoutAdd"] = a["ubo"] is None and not a["installs"] and a["permissionPrompt"] is None
             ok["choiceRecorded"] = a["choice"] == "accepted"
             ok["finishedOnHome"] = a["tabs"] == ["about:home"]
+        elif choice == "cancel":
+            st = wait_for(m, "permission prompt", lambda s: s["permissionPrompt"] or s["ubo"], 90)
+            res["promptCancelled"] = chrome(m, CANCEL_PROMPT_JS)
+            time.sleep(10)
+            if switch_to_welcome(m):
+                m.find_element("css selector", "button.primary").click()  # Start browsing
+            time.sleep(5)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["promptShownAndCancelled"] = res["promptCancelled"] is True
+            ok["noUboAfterCancel"] = a["ubo"] is None and not a["installs"]
+            ok["choiceRecorded"] = a["choice"] == "accepted"
         elif choice == "decline":
             time.sleep(60)
             a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
@@ -675,20 +714,24 @@ def phase_consent():
     finally:
         stop_browser(proc, m)
 
-    if choice == "close":
-        # ... and starts Orbis again: the screen must come back. Answer it this time (decline).
+    if choice in ASK_AGAIN_CHOICES:
+        # Orbis starts again: the screen must come back. Answer it this time (decline).
+        prev_choice = (res.get("after") or {}).get("choice")
+        amo_base = amo_lookups(dns_hosts(OUT))
         proc = m = None
         try:
             proc = start("dns.log.start2")
             m = connect(28284)
             st = welcome_open(m)
-            ok["askedAgainAfterClose"] = any(t.startswith("about:welcome") for t in st["tabs"])
-            box = check_screen(m, res, ok, "again")
+            ok["askedAgain"] = any(t.startswith("about:welcome") for t in st["tabs"])
+            ok["noStartMenuRepinOnAskAgain"] = st["startMenuPinOff"] is True
+            ok["startMenuPinAllowedOnRealFirstRun"] = res["firstBefore"]["startMenuPinOff"] is False
+            box = check_screen(m, res, ok, "again", prev_choice, amo_base)
             decline_on_screen(m, res, ok, box, "consent-close-again-screen.png")
             time.sleep(20)
             a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
             ok["noUbo"] = a["ubo"] is None and not a["installs"]
-            ok["choiceRecorded"] = a["choice"] == "declined"
+            ok["choiceDeclinedOnAskAgain"] = a["choice"] == "declined"
         finally:
             stop_browser(proc, m)
 
@@ -700,16 +743,21 @@ def phase_consent():
         ok["noAmoLookup"] = amo_lookups(hosts) == 0
     # Later starts of the same profile: after an answer the screen must never come back.
     res["laterStarts"] = []
-    for _ in range(2):
+    for i in range(2):
         proc = m = None
         try:
             proc = launch(prof, 28284, headless=True)
             m = connect(28284)
             time.sleep(15)
             res["laterStarts"].append(chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF]))
+            if choice == "accept" and i == 0:
+                # The user removes uBlock Origin later: that must not bring the question back.
+                ok["seenInstalledRecorded"] = res["laterStarts"][0]["seenInstalled"] is True
+                ok["uboRemoved"] = chrome(m, UNINSTALL_UBO_JS, [UBO]) is True
         finally:
             stop_browser(proc, m)
     ok["notAskedAgain"] = not any(t.startswith("about:welcome") for s in res["laterStarts"] for t in s["tabs"])
+    ok["noStartMenuPinOffWhenSettled"] = not any(s["startMenuPinOff"] for s in res["laterStarts"])
     res["result"] = "PASS" if ok and all(ok.values()) else "FAIL"
     dump("consent-%s.json" % choice, res)
     log(json.dumps({k: res[k] for k in ("pass", "result", "profile")}, indent=1))

@@ -93,6 +93,9 @@ CONSENT_SOURCE = (
      # Re-asking relies on: an empty saved milestone means a new profile, which opens the welcome page.
      ("return savedmstone ? OVERRIDE_NEW_MSTONE : OVERRIDE_NEW_PROFILE", '"startup.homepage_welcome_url"',
       '"browser.startup.homepage_override.mstone"')),
+    ("browser/components/shell/ShellService.sys.mjs",
+     # A repeated ask turns the first-run Start-menu pin off with this pref.
+     ('"browser.shell.disableStartMenuPin"',)),
     ("toolkit/components/nimbus/FeatureManifest.yaml",
      ("fallbackPref: browser.aboutwelcome.screens",
       "fallbackPref: intl.multilingual.aboutWelcome.languageMismatchEnabled")),
@@ -511,11 +514,21 @@ def check_ubo_consent(cfg_text, calls, policies):
         if (CONSENT_CHOICE_PREF, value) not in set_prefs(item.get(key)):
             fail("%s: %s must SET_PREF %s to %r" % (CONSENT_VAR, key, CONSENT_CHOICE_PREF, value))
     stored = "messaging-system-action." + CONSENT_CHOICE_PREF
-    rearm = re.search(r"getPref\(\"%s\"\).*?\n(.*?)clearPref\(\"%s\"\)" % (re.escape(stored), re.escape(MSTONE_PREF)),
+    # Ask again until settled (Shibi, 2026-11-12): only "declined" or an installed uBlock Origin (now or at an
+    # earlier start) stops it; "accepted" alone must not, since the install may never have happened.
+    rearm = re.search(r"getPref\(\"%s\"\)(.*?)clearPref\(\"%s\"\)" % (re.escape(stored), re.escape(MSTONE_PREF)),
                       cfg_text, re.S)
-    if not rearm or "\"accepted\"" not in rearm.group(1) or "\"declined\"" not in rearm.group(1):
-        fail("orbis.cfg: no 'ask again' block: it must read %s and clearPref(%s) unless the value is accepted or "
-             "declined (Shibi, 2026-11-12)" % (stored, MSTONE_PREF))
+    block = rearm.group(1) if rearm else ""
+    if not rearm or "\"declined\"" not in block or UBO_ID not in block or \
+            "getPref(\"orbis.ubo.seenInstalled\") !== true" not in block:
+        fail("orbis.cfg: no 'ask again' block: it must read %s and clearPref(%s) unless the value is declined or "
+             "uBlock Origin is or was installed (Shibi, 2026-11-12)" % (stored, MSTONE_PREF))
+    elif "\"accepted\"" in block:
+        fail("orbis.cfg: the 'ask again' block must not stop on \"accepted\": accepted without an install is asked "
+             "again (Shibi, 2026-11-12)")
+    if not re.search(r"defaultPref\(\"browser\.shell\.disableStartMenuPin\", true\)", block):
+        fail("orbis.cfg: a repeated ask must not re-pin the MSIX to the Start menu "
+             "(defaultPref browser.shell.disableStartMenuPin true in the 'ask again' block)")
     # The decline notice must say plainly that phishing and malware protection is off (Shibi, 2026-11-12).
     notice = json.dumps(item.get("uncheckedNotice", {}))
     for words in ("phishing and malware protection is off", "Google Safe Browsing", "Add-ons and themes"):

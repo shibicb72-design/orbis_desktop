@@ -167,6 +167,7 @@ python -I scripts\verify-build.py consent $inst $out\decline-de decline --system
 python -I scripts\verify-build.py consent $inst $out\close   close    # left unanswered: back at next start
 python -I scripts\verify-build.py consent $inst $out\close-de close --system-locale de-DE
 python -I scripts\verify-build.py consent $inst $out\early   early    # "Start browsing" before Firefox's Add
+python -I scripts\verify-build.py consent $inst $out\cancel  cancel   # "Cancel" in Firefox's Add prompt
 python -I scripts\verify-build.py second  $inst $out\second <profile folder printed by the consent accept phase>
 python -I scripts\verify-build.py ui      $inst $out\ui       # window titles, new tab, About dialog
 ```
@@ -185,13 +186,16 @@ The script's header lists every output file. What to compare:
 - `consent`: every `consent-<choice>.json` ends with `"result": "PASS"`. The `pass` map names each check:
   - all choices: the screen is shown with the box checked, and there is no uBlock Origin, install or
     `addons.mozilla.org` lookup before the answer;
-  - accept: uBlock Origin is active with exactly the 13 `3rdparty` lists;
+  - accept: uBlock Origin is active with exactly the 13 `3rdparty` lists, and removing it again (in the first
+    later start) does not bring the screen back;
   - decline: the warning about phishing and malware protection shows; there is no uBlock Origin and no
     `addons.mozilla.org` lookup at all;
-  - close: the screen is left and Orbis quit without an answer, no choice is recorded, and the screen is back at
-    the next start (then declined there);
-  - early: "Start browsing" before Firefox's Add prompt leaves no uBlock Origin; the choice is `accepted`;
-  - all choices: the choice is recorded, and two later starts do not show the screen. Any host ending in
+  - close: the screen is left and Orbis quit without an answer, so no choice is recorded;
+  - early: "Start browsing" before Firefox's Add prompt; cancel: "Cancel" in that prompt. Both leave no uBlock
+    Origin, and the choice is `accepted`;
+  - close, early, cancel: the screen is back at the next start, where `browser.shell.disableStartMenuPin` is true
+    (no MSIX Start-menu re-pin; it was false on the real first run), and is declined there;
+  - all choices: two later starts do not show the screen. Any host ending in
   `addons.mozilla.org` counts. The `--system-locale de-DE` runs set `intl.multilingual.aboutWelcome.systemLocaleOverride`
   in the test profile, so `about:welcome` sees a Windows language that differs from Orbis's; without the
   `languageMismatchEnabled` lock it would then ask `services.addons.mozilla.org` for language packs before the answer.

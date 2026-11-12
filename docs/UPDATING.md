@@ -77,12 +77,14 @@ the tag points at the pinned commit.
    python -I scripts\verify-build.py consent <install> <out>\close   close
    python -I scripts\verify-build.py consent <install> <out>\close-de close  --system-locale de-DE
    python -I scripts\verify-build.py consent <install> <out>\early   early
+   python -I scripts\verify-build.py consent <install> <out>\cancel  cancel
    ```
 
    All must end with `"result": "PASS"`. The `de-DE` runs simulate a Windows that is not in English, where
-   `about:welcome` would otherwise offer a language pack from addons.mozilla.org. `close` checks that a screen
-   left unanswered comes back at the next start (it relies on Firefox treating an empty
-   `browser.startup.homepage_override.mstone` as a new profile). No release without them: a changed
+   `about:welcome` would otherwise offer a language pack from addons.mozilla.org. `close`, `early` and `cancel`
+   check that the screen comes back at the next start while uBlock Origin is neither declined nor installed. That
+   relies on two things: Firefox treats an empty `browser.startup.homepage_override.mstone` as a new profile, and
+   `browser.shell.disableStartMenuPin` stops the Start-menu re-pin. No release without them: a changed
    `about:welcome` could install uBlock Origin without consent, show Mozilla's onboarding, stop asking again, or
    contact addons.mozilla.org before the user answers.
 8. Open a version bump PR that changes `upstream/firefox.json` only, plus whatever the later checks demand. Paste

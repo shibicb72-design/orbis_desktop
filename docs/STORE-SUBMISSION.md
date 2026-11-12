@@ -25,9 +25,10 @@ Paste the justification above, followed by this addendum, unchanged:
 > On first run Orbis shows one screen that offers the uBlock Origin content blocker ("Install uBlock Origin ad
 > blocker", checked by default). It is downloaded from addons.mozilla.org only if the user continues with the
 > box checked and confirms the browser's add-on permission prompt; with the box unchecked nothing is downloaded
-> or installed, and the screen states that phishing and malware protection is then off. If the screen is closed
-> without an answer, it is shown again at the next start; after an answer it is not shown again. The extension
-> is not included in the package. Telemetry is disabled.
+> or installed, and the screen states that phishing and malware protection is then off. The screen is shown
+> again at the next start until the user unchecks the box or the extension is installed (for example if the
+> screen is closed without an answer, or the permission prompt is cancelled); after that it is not shown again.
+> The extension is not included in the package. Telemetry is disabled.
 
 The Store description should say the same: uBlock Origin is offered at first run and downloaded from
 addons.mozilla.org if the user agrees (see policy 10.1.5 under "Risks").
@@ -48,7 +49,8 @@ In this order:
    yet. The test must show, in the installed package: `policies.json` active (`about:policies`), the
    `orbis.cfg` prefs locked, the uBlock Origin consent screen on first run (uBlock Origin installed after
    "Continue" with the box checked, nothing installed with it unchecked, the screen back after closing it
-   unanswered), and no Mozilla `distribution.ini`.
+   unanswered or cancelling Firefox's prompt, no Start-menu re-pin on that repeated ask), and no Mozilla
+   `distribution.ini`.
    Method: option 4, then option 1 in `docs/MSIX.md`, "Local install test".
 
 ## Store policy 10.2.1: engine currency
@@ -74,8 +76,9 @@ is the policy's wording; the rest summarises it.
   new profile shows a consent screen (`docs/SETTINGS.md`, "First run: uBlock Origin consent screen"). uBlock
   Origin is downloaded from addons.mozilla.org only after the user continues with "Install uBlock Origin ad
   blocker" checked (the default) and accepts Firefox's own "Add uBlock Origin?" permission prompt; with the box
-  unchecked nothing is downloaded. The screen is shown until the user answers (closing it unanswered brings it
-  back at the next start), and never after an answer. The extension is not in the package (no
+  unchecked nothing is downloaded. The screen comes back at each start until the user declines or uBlock Origin
+  is installed (closed unanswered, or accepted but not installed: Firefox's prompt left or cancelled, download
+  failed), and never after that. The extension is not in the package (no
   XPI is shipped). Checked by `scripts/check-settings.py` (no silent install in `policies.json`, the install
   only behind the checkbox) and `scripts/verify-build.py consent` (on a test build, see `docs/BUILD.md`). A
   reviewer may still ask why the box is checked by default; the answer is that nothing is downloaded until the
@@ -96,7 +99,7 @@ is the policy's wording; the rest summarises it.
   Orbis). uBlock Origin is now the user's choice, so a user who declines it has no phishing or malware site
   protection in Orbis. Shibi decided (2026-11-12) to warn and ask again: unchecking the box shows "Without uBlock
   Origin, phishing and malware protection is off. Orbis does not use Google Safe Browsing. ..." before Continue,
-  and a screen closed unanswered comes back at the next start. The risk for 10.2 stays for users who decline;
+  and the screen comes back at the next start until the user declines or uBlock Origin is installed. The risk for 10.2 stays for users who decline;
   the warning makes it an informed choice.
 - **A privacy policy URL is required (policy 10.5.1).** Under 10.5.1, Desktop Bridge and Win32 products always
   need a privacy policy, whatever data they collect. Orbis is one, and has no privacy policy yet. It must

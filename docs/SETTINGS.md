@@ -46,7 +46,7 @@ Shibi has not explicitly approved these. They follow Fable's recommended default
 |---|---|---|
 | Google Safe Browsing | Off | Off, every Google endpoint blanked (`orbis.cfg`); phishing and malware protection come from uBlock Origin's lists |
 | uBlock Origin | Offered at first run, as on Android: "Install uBlock Origin ad blocker", on by default; one click on Continue installs it from addons.mozilla.org, and nothing is installed if the user turns it off (Store policy 10.1.5). Replaces the earlier automatic install | First-run screen in `about:welcome` (`browser.aboutwelcome.screens`, `orbis.cfg`); `ExtensionSettings` only allows uBlock Origin. See "First run: uBlock Origin consent screen" |
-| Declining uBlock Origin | Warn clearly that phishing and malware protection is off without it (no Google Safe Browsing); ask again at the next start if the screen was closed or left unanswered; never ask again after an answer | `uncheckedNotice` and the "ask again" block in `orbis.cfg`; see "First run: uBlock Origin consent screen" |
+| Declining uBlock Origin | Warn clearly that phishing and malware protection is off without it (no Google Safe Browsing); ask again at the next start until the user declines or uBlock Origin is installed: a screen closed or left unanswered, and "accepted" without an install (Start browsing before Add, Add cancelled, download failed), ask again | `uncheckedNotice` and the "ask again" block in `orbis.cfg`; see "First run: uBlock Origin consent screen" |
 | uBlock Origin filter lists | Option C: Orbis's list set, **enforced at every launch**. A user's list changes reset at the next start | `3rdparty` `toOverwrite.filterLists`, re-applied by uBlock Origin at every launch. Options A and B were rejected (below) |
 | Push websocket (`push.services.mozilla.com`) | Stays on | On (Firefox default) and disclosed in "Network calls that remain" and the privacy policy |
 | AMO metadata cache (`extensions.getAddons.cache.enabled`) | Off | false, locked (`orbis.cfg`) |
@@ -262,20 +262,34 @@ How it works, with no patch: Firefox 160's onboarding page `about:welcome` shows
 experiment can replace them. Firefox opens `about:welcome` in the first window of a new profile
 (`OVERRIDE_NEW_PROFILE` in `BrowserContentHandler.sys.mjs`).
 
-**Asked again until answered** (Shibi, 2026-11-12):
-- If the user closes the window or tab, or leaves the screen, without answering, no choice is recorded and the
-  screen comes back at the next start.
-- How: `orbis.cfg` runs after Firefox has read `prefs.js`. When `messaging-system-action.orbis.ubo.consent` is
-  neither `accepted` nor `declined`, it clears `browser.startup.homepage_override.mstone`. Firefox then treats
-  the start as the first run of a new profile and opens `about:welcome` again.
-- Once the user has answered, the screen never comes back.
-- It is not re-armed when uBlock Origin is already installed (its ID is in `extensions.webextensions.uuids`), so
-  a user who added it by hand is not asked.
-- Side effects of a first run, read in the source:
-  - Firefox may add the "Import bookmarks" button to the bookmarks toolbar (`PlacesBrowserStartup`).
-  - In the MSIX, Firefox pins Orbis to the Start menu if it is not pinned
-    (`StartupOSIntegration.maybePinMSIXToStartMenu`). This also runs on the real first run. So a user who keeps
-    closing the screen unanswered, and unpins Orbis, gets it pinned again at each start.
+**Asked again until settled** (Shibi, 2026-11-12). The question is settled only when:
+- the user declined, or
+- uBlock Origin is installed, or was installed at an earlier start (`orbis.ubo.seenInstalled`), so removing it
+  later does not bring the question back.
+
+Everything else shows the screen again at the next start:
+- the window or tab was closed, or the screen was left, without an answer;
+- the user accepted but uBlock Origin was not installed: "Start browsing" before Firefox's "Add", "Cancel" in
+  that prompt, or a failed download (for example offline).
+
+How it works:
+- `orbis.cfg` runs after Firefox has read `prefs.js`. While the question is not settled, it clears
+  `browser.startup.homepage_override.mstone`. Firefox then treats the start as the first run of a new profile and
+  opens `about:welcome` again.
+- An installed uBlock Origin has its ID in `extensions.webextensions.uuids`, so a user who added it by hand is not
+  asked either.
+
+First-run side effects on a repeated ask, read in the source:
+- **Start menu (MSIX):** Firefox pins Orbis to the Start menu on a first run if it is not pinned
+  (`StartupOSIntegration.maybePinMSIXToStartMenu`). Limited to the real first run: on a repeated ask (the profile
+  already has a saved milestone), `orbis.cfg` sets `browser.shell.disableStartMenuPin` to true on the default
+  branch for that start only. Firefox 160's `ShellService.doesAppNeedStartMenuPin` then returns false. A user who
+  unpinned Orbis is not re-pinned. Tested as a pref value only; the MSIX pin itself was not run.
+- **Import button:** Firefox may add the "Import bookmarks" button to the bookmarks toolbar
+  (`PlacesBrowserStartup.maybeAddImportButton`) when the toolbar has fewer than 3 bookmarks. No pref turns that
+  off; only the `DisableProfileImport` policy would, and it also removes browser import. Not limited: if the user
+  removes the button and keeps leaving the screen unanswered, it comes back at each such start. It stops once the
+  question is settled.
 
 The screens (`ORBIS_UBO_CONSENT_SCREENS` in `orbis.cfg`; text from Android's `ubo_onboarding_title`,
 `ubo_disclosure`, `ubo_etp_stays_on`, `ubo_continue` and `ubo_installing`):
@@ -292,9 +306,9 @@ The screens (`ORBIS_UBO_CONSENT_SCREENS` in `orbis.cfg`; text from Android's `ub
    then shows its own "Add uBlock Origin?" prompt with the add-on's permissions; "Add" installs it. "Start
    browsing" opens the home page. Leaving `about:welcome` while that prompt is still open cancels the install
    (Firefox removes the prompt on navigation); moving to the second screen does not, which is why there is one.
-   Tested (`verify-build.py consent early`): clicking "Start browsing" before "Add" leaves no uBlock Origin and no
-   pending install. The choice stays `accepted`, so the screen does not come back, and that user gets uBlock
-   Origin only by adding it later.
+   Tested (`verify-build.py consent early` and `cancel`): "Start browsing" before "Add", or "Cancel" in the
+   prompt, leaves no uBlock Origin and no pending install. The choice is `accepted`, but the screen comes back at
+   the next start, because uBlock Origin is not installed.
 3. Checkbox off: Continue records `declined` and opens the home page. Nothing is downloaded.
 
 Later installs: Add-ons and themes (`about:addons`) search, or addons.mozilla.org. `ExtensionSettings` allows
@@ -309,15 +323,20 @@ uBlock Origin and keeps it working in private windows, and the `3rdparty` lists 
 | `trailhead.firstrun.didHandleCampaignAction` | true | Locked | Marks the install's campaign action as already handled. Otherwise `about:welcome` runs the action named by the install's attribution (for an MSIX, the Store campaign ID; for example pin to taskbar or set as default) when the first screen shows, before the user answers | code: browser/components/aboutwelcome/actors/AboutWelcomeParent.sys.mjs |
 | `startup.homepage_welcome_url` | `"about:welcome"` | Locked | First-run page of a new profile: the consent screen. The branding (`firefox-branding.js`) sets `""`; this overrides it | code: browser/components/BrowserContentHandler.sys.mjs |
 | `startup.homepage_welcome_url.additional` | `""` | Locked | No second first-run tab | code: browser/components/BrowserContentHandler.sys.mjs |
-| `messaging-system-action.orbis.ubo.consent` | `"accepted"` or `"declined"` | Written once by the screen; not set by `orbis.cfg` | Records the answer on the screen (for checks and support). **It is not proof that uBlock Origin is installed:** after `accepted` the user can still refuse Firefox's prompt or leave the page before it, the download can fail, and the user can install or remove uBlock Origin later. Ask the Add-ons Manager for the install state. The screen asks for `orbis.ubo.consent`; Firefox's `SET_PREF` action adds the `messaging-system-action.` prefix to every pref outside its allow-list. Not set if the user closes the window or leaves the screen without answering; the screen then comes back at the next start | Orbis's own pref |
-| `browser.startup.homepage_override.mstone` | cleared (user value removed) while no answer is recorded | Not locked; Firefox sets it again at every start | Makes Firefox treat the start as a first run, which opens `about:welcome` again (see "Asked again until answered" above). Never touched after an answer | code: browser/components/BrowserContentHandler.sys.mjs |
-| `extensions.webextensions.uuids` | read only | - | `orbis.cfg` reads it to skip the re-ask when uBlock Origin is already installed | code: toolkit/components/extensions/Extension.sys.mjs |
+| `messaging-system-action.orbis.ubo.consent` | `"accepted"` or `"declined"` | Written once by the screen; not set by `orbis.cfg` | Records the answer on the screen (for checks and support). **It is not proof that uBlock Origin is installed:** after `accepted` the user can still refuse Firefox's prompt or leave the page before it, the download can fail, and the user can install or remove uBlock Origin later. Ask the Add-ons Manager for the install state. The screen asks for `orbis.ubo.consent`; Firefox's `SET_PREF` action adds the `messaging-system-action.` prefix to every pref outside its allow-list. Not set if the user closes the window or leaves the screen without answering. Only `declined` settles the question by itself; `accepted` settles it only once uBlock Origin is installed (see "Asked again until settled") | Orbis's own pref |
+| `orbis.ubo.seenInstalled` | true, set once | Set by `orbis.cfg` at a start where uBlock Origin is installed | Records that uBlock Origin was installed once, so a user who removes it later is not asked again | Orbis's own pref |
+| `browser.startup.homepage_override.mstone` | cleared (user value removed) while the question is not settled | Not locked; Firefox sets it again at every start | Makes Firefox treat the start as a first run, which opens `about:welcome` again (see "Asked again until settled" above). Never touched once settled | code: browser/components/BrowserContentHandler.sys.mjs |
+| `browser.shell.disableStartMenuPin` | true on the default branch, for a repeated ask only | Default, not saved; only for that start | A repeated ask is a first run for Firefox, which would pin the MSIX to the Start menu again if the user unpinned it. Only the real first run of a profile may pin | code: browser/components/shell/ShellService.sys.mjs |
+| `extensions.webextensions.uuids` | read only | - | `orbis.cfg` reads it to see whether uBlock Origin is installed | code: toolkit/components/extensions/Extension.sys.mjs |
 
 `check-settings.py` also checks the pinned source for everything the screens use (the checkbox actions,
 `collectSelect`, `INSTALL_ADDON_FROM_URL`, `OPEN_ABOUT_PAGE` with `home`, the two switches above), and that no
 policy Orbis uses sets `browser.aboutwelcome.enabled`: a Firefox that ignores the screens shows Mozilla's full
 onboarding instead. `check-settings.py` also fails in these cases:
-- the "ask again" block is missing;
+- the "ask again" block is missing, or does not depend on `declined`, the uBlock Origin ID and
+  `orbis.ubo.seenInstalled`;
+- the "ask again" block stops on `accepted` alone;
+- a repeated ask does not set `browser.shell.disableStartMenuPin`;
 - the checkbox actions do not record `accepted`/`declined` in the pref that block reads;
 - the unchecked notice does not name the missing phishing and malware protection.
 
