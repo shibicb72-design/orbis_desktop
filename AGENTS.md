@@ -39,9 +39,11 @@ Items marked "planned" do not exist yet.
   Windows PowerShell 5.1. Behind or stale: opens or updates the issue "Firefox pin is out of date" (label
   `firefox-update`). Current: closes it. Check error: the job fails and no issue is changed. Only `GITHUB_TOKEN`,
   no other secrets, no actions besides `actions/checkout` pinned by commit.
-- `scripts/sync-currency-issue.ps1`: the workflow's issue step (GitHub CLI). `-DryRun` prints the issue text only.
-- `tests/test-firefox-currency.ps1`: offline test of the currency check and the issue text with test pins, local
-  feed files and a throw-away git repository.
+- `scripts/sync-currency-issue.ps1`: the workflow's issue step (GitHub CLI). `-DryRun` runs the real reads
+  and prints the writes; `-GhJson` (tests) replaces the reads with canned output. Wrap lists in `@(...)` before
+  `.Count` or `[0]`: a function's empty or one-item result unrolls to `$null` or a scalar under StrictMode.
+- `tests/test-firefox-currency.ps1`: offline test of the currency check and the issue sync with test pins, local
+  feed files, a throw-away git repository and canned gh output (0, 1, 2 open issues; current and behind).
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release, and what the daily workflow does.
 - `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
   `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`), the

@@ -9,8 +9,9 @@ Offline test of check-firefox-currency.ps1 and sync-currency-issue.ps1 -DryRun.
 .DESCRIPTION
 Runs the currency check with test pins against local feed files (file:// URLs)
 and a throw-away local git repository as the "Firefox" remote, then checks the
-exit codes, the JSON report and the issue text. Needs git; no network, no gh,
-no GitHub. Everything is written to a new folder under %TEMP%, which is deleted
+exit codes, the JSON report and the issue text. The issue sync runs its real
+logic with -DryRun -GhJson: canned gh output for 0, 1 and 2 open issues, and
+the printed write calls are checked. Needs git; no network, no gh, no GitHub. Everything is written to a new folder under %TEMP%, which is deleted
 at the end.
 
 Prints one PASS or FAIL line per case. Exit code 0 when every case passes.
@@ -62,11 +63,22 @@ function Invoke-Check ([string]$Pin, [string]$Feed, [string]$Major, [string]$Sta
     New-Object PSObject -Property @{ Code = $LASTEXITCODE; Out = ($out -join "`n"); Report = $r; Path = $report }
 }
 
-function Invoke-SyncDryRun ([string]$Report, [string]$Today) {
+function Invoke-SyncDryRun ([string]$Report, [string]$Today, [string]$IssueList = '[]',
+                            [string]$LabelList = '[{"name":"firefox-update"}]') {
+    # Runs the real sync logic; -GhJson stands in for what gh would print for the read calls.
     $ErrorActionPreference = 'Continue'
-    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $sync -ReportFile $Report -Today $Today -DryRun 2>&1 |
-        ForEach-Object { "$_" }
+    $stub = Join-Path $work ('gh-' + [guid]::NewGuid().ToString('N') + '.json')
+    Write-Utf8 $stub (@{ 'issue list' = $IssueList; 'label list' = $LabelList } | ConvertTo-Json)
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $sync -ReportFile $Report -Today $Today `
+        -Repository 'owner/name' -DryRun -GhJson $stub 2>&1 | ForEach-Object { "$_" }
     New-Object PSObject -Property @{ Code = $LASTEXITCODE; Out = ($out -join "`n") }
+}
+
+function Get-Count ([string]$Text, [string]$Pattern) { [regex]::Matches($Text, $Pattern).Count }
+
+function ConvertTo-IssueJson ([object[]]$Issues) {
+    # gh issue list --json number,title,body prints an array of these.
+    ConvertTo-Json -InputObject @($Issues | ForEach-Object { [ordered]@{ number = $_[0]; title = $_[1]; body = $_[2] } }) -Compress
 }
 
 try {
@@ -93,7 +105,9 @@ try {
     $r = Invoke-Check (New-Pin 'FIREFOX_160_0_RELEASE' $commit $remote) $feed160 $major $stab
     Assert-Case 'current pin: exit 0, status current' ($r.Code -eq 0 -and $r.Report.status -eq 'current' -and $r.Out -match '^OK: pinned 160\.0') "$($r.Code) $($r.Out)"
     $s = Invoke-SyncDryRun $r.Path '2026-11-12'
-    Assert-Case 'current pin: sync would close the issue' ($s.Code -eq 0 -and $s.Out -match 'would close') $s.Out
+    Assert-Case 'current pin: sync with no open issue does nothing' ($s.Code -eq 0 -and $s.Out -match 'no open issue' -and $s.Out -notmatch 'DRY RUN') $s.Out
+    $currentReport = Join-Path $work 'report-current.json'
+    Copy-Item -LiteralPath $r.Path -Destination $currentReport
 
     # 2. One major behind.
     $r = Invoke-Check (New-Pin 'FIREFOX_159_0_1_RELEASE' $other $remote) $feed160 $major $stab
@@ -109,6 +123,8 @@ try {
     Assert-Case '159.0.1 vs 160.0: issue body has version, dates, majors, no Store warning' $ok $s.Out
     $s = Invoke-SyncDryRun $r.Path '2026-11-14'
     Assert-Case '159.0.1 vs 160.0: deadline marked passed on 2026-11-14' ($s.Out -match '2026-11-13 \(passed\)') $s.Out
+    $behindReport = Join-Path $work 'report-behind.json'
+    Copy-Item -LiteralPath $r.Path -Destination $behindReport
 
     # 2b. The deadline counts from the first release the pin lacks, not the latest.
     $r = Invoke-Check (New-Pin 'FIREFOX_159_0_RELEASE' $other $remote) $feed160 $major $stab
@@ -181,6 +197,49 @@ try {
     Assert-Case 'beta version in feed: exit 2, no report' ($r.Code -eq 2 -and $null -eq $r.Report) "$($r.Code) $($r.Out)"
     $r = Invoke-Check (New-Pin 'FIREFOX_160_0_RELEASE' $commit (Join-Path $work 'no-such-remote')) $feed160 $major $stab
     Assert-Case 'git remote unreachable: exit 2, no report' ($r.Code -eq 2 -and $null -eq $r.Report) "$($r.Code) $($r.Out)"
+
+    # 12. Issue sync against canned gh output: 0, 1 and 2 matching issues, current and behind.
+    # Live run 43331020811 failed here: zero issues made $open $null, and .Count threw.
+    $t = 'Firefox pin is out of date'
+    $other9 = @(9, 'Something else', 'x')   # same label, other title: never touched
+    $none = ConvertTo-IssueJson @(, $other9)
+    $one = ConvertTo-IssueJson @(@(5, $t, 'old body'), $other9)
+    $two = ConvertTo-IssueJson @(@(7, $t, 'old body'), @(3, $t, 'old body'), $other9)
+
+    $s = Invoke-SyncDryRun $currentReport '2026-11-12' $none
+    Assert-Case 'sync current, 0 issues: no call' ($s.Code -eq 0 -and $s.Out -match 'no open issue' -and (Get-Count $s.Out 'DRY RUN: gh') -eq 0) $s.Out
+    $s = Invoke-SyncDryRun $currentReport '2026-11-12' $one
+    Assert-Case 'sync current, 1 issue: close #5 only' ($s.Code -eq 0 -and (Get-Count $s.Out 'DRY RUN: gh issue close 5 ') -eq 1 -and (Get-Count $s.Out 'DRY RUN: gh') -eq 1) $s.Out
+    $s = Invoke-SyncDryRun $currentReport '2026-11-12' $two
+    $ok = $s.Code -eq 0 -and (Get-Count $s.Out 'DRY RUN: gh issue close 3 ') -eq 1 -and (Get-Count $s.Out 'DRY RUN: gh issue close 7 ') -eq 1 -and
+          (Get-Count $s.Out 'DRY RUN: gh') -eq 2
+    Assert-Case 'sync current, 2 issues: close #3 and #7, not #9' $ok $s.Out
+
+    $s = Invoke-SyncDryRun $behindReport '2026-11-12' $none
+    $ok = $s.Code -eq 0 -and (Get-Count $s.Out 'DRY RUN: gh issue create ') -eq 1 -and (Get-Count $s.Out 'DRY RUN: gh label create') -eq 0 -and
+          (Get-Count $s.Out 'DRY RUN: gh') -eq 1 -and $s.Out -match '\| First release the pin lacks \| 160\.0 \|'
+    Assert-Case 'sync behind, 0 issues, label exists: create issue with body' $ok $s.Out
+    $s = Invoke-SyncDryRun $behindReport '2026-11-12' '[]' '[]'
+    Assert-Case 'sync behind, 0 issues, label missing: create label, then issue' ($s.Code -eq 0 -and $s.Out -match '(?s)DRY RUN: gh label create firefox-update .*DRY RUN: gh issue create ') $s.Out
+    $lines = @($s.Out -split "`n")
+    $from = [array]::IndexOf($lines, @($lines | Where-Object { $_ -like 'DRY RUN: gh issue create *' })[0]) + 1
+    $to = [array]::IndexOf($lines, 'Would open the issue.') - 1
+    $currentBody = $lines[$from..$to] -join "`n"
+    $s = Invoke-SyncDryRun $behindReport '2026-11-12' $one
+    $ok = $s.Code -eq 0 -and (Get-Count $s.Out 'DRY RUN: gh issue edit 5 ') -eq 1 -and (Get-Count $s.Out 'DRY RUN: gh issue comment 5 ') -eq 1 -and
+          (Get-Count $s.Out 'DRY RUN: gh') -eq 2
+    Assert-Case 'sync behind, 1 issue with old body: edit and comment #5' $ok $s.Out
+    $s = Invoke-SyncDryRun $behindReport '2026-11-12' (ConvertTo-IssueJson @(@(5, $t, ($currentBody -replace "`n", "`r`n")), $other9))
+    Assert-Case 'sync behind, 1 issue already current: no call' ($s.Code -eq 0 -and $s.Out -match '#5 is already up to date' -and (Get-Count $s.Out 'DRY RUN: gh') -eq 0) $s.Out
+    $s = Invoke-SyncDryRun $behindReport '2026-11-12' $two
+    $ok = $s.Code -eq 0 -and $s.Out -match '2 open .* updating the oldest, #3' -and (Get-Count $s.Out 'DRY RUN: gh issue edit 3 ') -eq 1 -and
+          (Get-Count $s.Out 'DRY RUN: gh issue comment 3 ') -eq 1 -and (Get-Count $s.Out 'DRY RUN: gh') -eq 2
+    Assert-Case 'sync behind, 2 issues: update the oldest (#3) only' $ok $s.Out
+
+    $s = Invoke-SyncDryRun $currentReport '2026-11-12' ('{"number":5,"title":"' + $t + '","body":"x"}')
+    Assert-Case 'sync current, gh prints a bare object: close #5' ($s.Code -eq 0 -and (Get-Count $s.Out 'DRY RUN: gh issue close 5 ') -eq 1) $s.Out
+    $s = Invoke-SyncDryRun $behindReport '2026-11-12' ''
+    Assert-Case 'sync behind, gh prints nothing: create issue' ($s.Code -eq 0 -and (Get-Count $s.Out 'DRY RUN: gh issue create ') -eq 1) $s.Out
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
