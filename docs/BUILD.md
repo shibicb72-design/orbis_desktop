@@ -162,6 +162,8 @@ python -I scripts\verify-build.py idle    $inst $out\idle     # 3 minutes idle: 
 python -I scripts\verify-build.py hosts   $inst $out\idle     # host names the idle run looked up
 python -I scripts\verify-build.py consent $inst $out\accept  accept   # first-run screen, accepted: uBO + 13 lists
 python -I scripts\verify-build.py consent $inst $out\decline decline  # first-run screen, declined: no uBO, no AMO
+python -I scripts\verify-build.py consent $inst $out\accept-de  accept  --system-locale de-DE   # same, on a
+python -I scripts\verify-build.py consent $inst $out\decline-de decline --system-locale de-DE   # German Windows
 python -I scripts\verify-build.py second  $inst $out\second <profile folder printed by the consent accept phase>
 python -I scripts\verify-build.py ui      $inst $out\ui       # window titles, new tab, About dialog
 ```
@@ -180,7 +182,10 @@ The script's header lists every output file. What to compare:
 - `consent`: `consent-accept.json` and `consent-decline.json` end with `"result": "PASS"`; the `pass` map names
   each check (screen shown with the box checked; no uBlock Origin, install or `addons.mozilla.org` lookup before
   the answer; accept: uBlock Origin active with exactly the 13 `3rdparty` lists; decline: no uBlock Origin and no
-  `addons.mozilla.org` lookup at all; the choice recorded; not asked again at the second start).
+  `addons.mozilla.org` lookup at all; the choice recorded; not asked again at the second start). Any host ending in
+  `addons.mozilla.org` counts. The `--system-locale de-DE` runs set `intl.multilingual.aboutWelcome.systemLocaleOverride`
+  in the test profile, so `about:welcome` sees a Windows language that differs from Orbis's; without the
+  `languageMismatchEnabled` lock it would then ask `services.addons.mozilla.org` for language packs before the answer.
   `consent-<choice>-screen.png` shows the screen. The accept run also runs the `idle` checks
   (`checks-consent-accept.json`). The test accepts Firefox's "Add uBlock Origin?" prompt itself; it runs headless,
   so look at the screen once in a real window too.

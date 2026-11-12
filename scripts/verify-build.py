@@ -29,7 +29,11 @@ Phases:
            there is no uBlock Origin, no install and no addons.mozilla.org lookup in the whole DNS log. Both:
            the choice pref is recorded, and a second start of the same profile does not show the screen again.
            Writes consent-<choice>.json (with a "pass" map and "PASS"/"FAIL"), checks-consent-<choice>.json,
-           consent-<choice>-screen.png and the DNS log.
+           consent-<choice>-screen.png and the DNS log. "addons.mozilla.org lookup" means any host name ending
+           in addons.mozilla.org (also services. and versioncheck-bg.). With --system-locale (for example
+           de-DE) the profile pretends that Windows uses that language
+           (intl.multilingual.aboutWelcome.systemLocaleOverride), the case in which about:welcome would offer a
+           language pack from addons.mozilla.org: run accept and decline with it too.
   second   Second start of an accepted profile (EXTRA = the profile folder, which must be inside --profiles):
            uBlock Origin re-applies its enforced lists at launch (checks-second.json).
   ui       New profile with a window: window titles, brand strings, main window and About dialog screenshots and
@@ -75,7 +79,12 @@ def parse_args():
                     help="consent: accept or decline; second: the profile folder; quit: the Marionette port")
     ap.add_argument("--source", default=os.path.join(home, "orbis_desktop_src", "firefox"))
     ap.add_argument("--profiles", default=os.path.join(home, "orbis_desktop_src", "test-profiles"))
-    return ap.parse_args()
+    ap.add_argument("--system-locale", default=None,
+                    help="consent: Windows language to simulate in the test profile, for example de-DE")
+    args = ap.parse_args()
+    if args.system_locale and not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*", args.system_locale):
+        ap.error("--system-locale must be a locale code such as de-DE")
+    return args
 
 
 def real_on_c(path):
@@ -145,7 +154,7 @@ def tree_state():
     return res
 
 
-def launch(profile, port, headless=True, extra_env=None, no_profile=False):
+def launch(profile, port, headless=True, extra_env=None, no_profile=False, extra_prefs=None):
     env = dict(os.environ)
     env["MOZ_REMOTE_ALLOW_SYSTEM_ACCESS"] = "1"
     for k in ("XRE_PROFILE_PATH", "MOZ_HEADLESS"):
@@ -161,6 +170,8 @@ def launch(profile, port, headless=True, extra_env=None, no_profile=False):
             f.write('user_pref("marionette.port", %d);\n' % port)
             # Marionette must not apply its recommended (automation) prefs: they change network behaviour.
             f.write('user_pref("remote.prefs.recommended", false);\n')
+            for k, v in (extra_prefs or {}).items():
+                f.write("user_pref(%s, %s);\n" % (json.dumps(k), json.dumps(v)))
         args += ["-profile", profile, "--new-instance"]
     log("launch:", args)
     return subprocess.Popen(args, env=env)
@@ -288,9 +299,12 @@ PREFS = [
     "general.config.filename", "app.update.enabled",
     "browser.aboutwelcome.enabled", "browser.aboutwelcome.experimentsGate.enabled",
     "startup.homepage_welcome_url", "messaging-system-action.orbis.ubo.consent",
+    "intl.multilingual.aboutWelcome.languageMismatchEnabled", "trailhead.firstrun.didHandleCampaignAction",
+    "network.dns.disablePrefetch", "network.prefetch-next", "network.http.speculative-parallel-limit",
 ]
 CONSENT_PREF = "messaging-system-action.orbis.ubo.consent"
 AMO_HOST = "addons.mozilla.org"
+LOCALE_OVERRIDE_PREF = "intl.multilingual.aboutWelcome.systemLocaleOverride"
 
 CHECK_JS = r"""
 const [prefs, ubo, done] = [arguments[0], arguments[1], arguments[arguments.length - 1]];
@@ -500,6 +514,11 @@ def dns_hosts(folder):
     return counts
 
 
+def amo_lookups(hosts):
+    """Lookups of addons.mozilla.org and its subdomains (services., versioncheck-bg.) in a dns_hosts() result."""
+    return sum(n for h, n in hosts.items() if h == AMO_HOST or h.endswith("." + AMO_HOST))
+
+
 def expected_lists():
     """uBlock Origin's toOverwrite.filterLists from the policies.json that the tested install uses."""
     with open(os.path.join(INSTALL, "distribution", "policies.json"), encoding="utf-8") as f:
@@ -532,18 +551,19 @@ def phase_consent():
     if choice not in ("accept", "decline"):
         sys.exit("consent: give accept or decline as EXTRA")
     prof = new_profile("consent-" + choice)
-    res = {"choice": choice, "profile": prof, "pass": {}}
+    res = {"choice": choice, "profile": prof, "systemLocale": ARGS.system_locale, "pass": {}}
+    prefs = {LOCALE_OVERRIDE_PREF: ARGS.system_locale} if ARGS.system_locale else None
     ok = res["pass"]
     proc = m = None
     try:
         proc = launch(prof, 28284, headless=True,
                       extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5",
-                                 "MOZ_LOG_FILE": os.path.join(OUT, "dns.log")})
+                                 "MOZ_LOG_FILE": os.path.join(OUT, "dns.log")}, extra_prefs=prefs)
         m = connect(28284)
         st = wait_for(m, "about:welcome open", lambda s: any(t.startswith("about:welcome") for t in s["tabs"]), 60)
         time.sleep(5)  # the page renders its screen after it has loaded
         res["before"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
-        res["amoLookupsBefore"] = dns_hosts(OUT).get(AMO_HOST, 0)
+        res["amoLookupsBefore"] = amo_lookups(dns_hosts(OUT))
         if not switch_to_welcome(m):
             raise RuntimeError("no about:welcome tab: %r" % st["tabs"])
         box = m.find_element("css selector", "#orbis-install-ubo")
@@ -601,7 +621,7 @@ def phase_consent():
     hosts = dns_hosts(OUT)
     res["dnsHosts"] = dict(sorted(hosts.items()))
     if choice == "decline":
-        ok["noAmoLookup"] = hosts.get(AMO_HOST, 0) == 0
+        ok["noAmoLookup"] = amo_lookups(hosts) == 0
     else:
         ok["amoLookupAfterConsent"] = hosts.get(AMO_HOST, 0) > 0
     # Second start of the same profile: the screen must not come back.

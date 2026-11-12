@@ -55,7 +55,32 @@ the tag points at the pinned commit.
    ```
 
    If a patch no longer applies, rebase it by hand on the new source (see `docs/PATCHES.md`).
-6. Open a version bump PR that changes `upstream/firefox.json` only, plus whatever the later checks demand.
+6. Check the prefs, the policies and the uBlock Origin consent screen against the new source:
+
+   ```
+   python -I scripts\check-settings.py
+   ```
+
+   Besides prefs and policies, it checks that the new source's `about:welcome` still has everything the consent
+   screen uses (`checkedAction`, `uncheckedAction`, `uncheckedNotice`, `collectSelect`, `INSTALL_ADDON_FROM_URL`,
+   `OPEN_ABOUT_PAGE` with `home`, the language-mismatch and campaign-action switches), and that no policy Orbis
+   uses has started to switch `about:welcome` off. If Firefox drops or renames one of them, `about:welcome` may
+   ignore Orbis's screens and show Mozilla's full onboarding instead, so this check must pass.
+7. **Required gate, on every bump:** build, then run the consent test on the new build (`docs/BUILD.md`, step 5),
+   both ways:
+
+   ```
+   python -I scripts\verify-build.py consent <install> <out>\accept  accept
+   python -I scripts\verify-build.py consent <install> <out>\decline decline
+   python -I scripts\verify-build.py consent <install> <out>\accept-de  accept  --system-locale de-DE
+   python -I scripts\verify-build.py consent <install> <out>\decline-de decline --system-locale de-DE
+   ```
+
+   All four must end with `"result": "PASS"`. The `de-DE` runs simulate a Windows that is not in English, where
+   `about:welcome` would otherwise offer a language pack from addons.mozilla.org. No release without it: a changed `about:welcome` could install uBlock
+   Origin without consent, show Mozilla's onboarding, or contact addons.mozilla.org before the user answers.
+8. Open a version bump PR that changes `upstream/firefox.json` only, plus whatever the later checks demand. Paste
+   the four consent results into the PR.
 
 To build a release candidate before release day, pin `FIREFOX_<n>_BUILD<k>` the same way. On release day, check
 that `FIREFOX_<n>_RELEASE` is the same commit, then switch the tag in the pin.
