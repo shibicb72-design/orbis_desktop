@@ -1,0 +1,106 @@
+{
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisableRemoteImprovements": true,
+    "DisableAccounts": true,
+    "IPProtectionAvailable": false,
+    "DisableAppUpdate": true,
+    "DisableDefaultBrowserAgent": true,
+    "DontCheckDefaultBrowser": true,
+    "DisableFeedbackCommands": true,
+    "SkipTermsOfUse": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "NoDefaultBookmarks": true,
+    "FirefoxHome": {
+      "SponsoredTopSites": false,
+      "Stories": false,
+      "SponsoredStories": false,
+      "Weather": false,
+      "Locked": true
+    },
+    "FirefoxSuggest": {
+      "WebSuggestions": false,
+      "SponsoredSuggestions": false,
+      "ImproveSuggest": false,
+      "OnlineEnabled": false,
+      "Locked": true
+    },
+    "UserMessaging": {
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "UrlbarInterventions": false,
+      "SkipOnboarding": true,
+      "MoreFromMozilla": false,
+      "FirefoxLabs": false,
+      "Locked": true
+    },
+    "AIControls": {
+      "Default": {
+        "Value": "blocked",
+        "Locked": true
+      },
+      "Translations": {
+        "Value": "available",
+        "Locked": false
+      }
+    },
+    "HttpsOnlyMode": "enabled",
+    "EncryptedMediaExtensions": {
+      "Enabled": false
+    },
+    "DNSOverHTTPS": {
+      "Enabled": false
+    },
+    "SearchEngines": {
+      "Default": "DuckDuckGo",
+      "Add": [
+        {
+          "Name": "Brave Search",
+          "URLTemplate": "https://search.brave.com/search?q={searchTerms}",
+          "Method": "GET",
+          "Alias": "@brave"
+        },
+        {
+          "Name": "Startpage",
+          "URLTemplate": "https://www.startpage.com/do/search?q={searchTerms}",
+          "Method": "GET",
+          "Alias": "@startpage"
+        }
+      ]
+    },
+    "ExtensionSettings": {
+      "*": {
+        "installation_mode": "allowed",
+        "allowed_types": ["extension", "theme", "dictionary", "sitepermission"]
+      },
+      "uBlock0@raymondhill.net": {
+        "installation_mode": "normal_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/uBlock0@raymondhill.net/latest.xpi",
+        "private_browsing": true
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "uBlock0@raymondhill.net": {
+          "toOverwrite": {
+            "filterLists": [
+              "user-filters",
+              "ublock-filters",
+              "ublock-badware",
+              "ublock-privacy",
+              "ublock-unbreak",
+              "ublock-quick-fixes",
+              "easylist",
+              "easyprivacy",
+              "urlhaus-1",
+              "plowe-0",
+              "curben-phishing"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

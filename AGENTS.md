@@ -36,13 +36,15 @@ Items marked "planned" do not exist yet.
 - `scripts/check-firefox-currency.ps1`: exits non-zero when Mozilla's latest release is newer than the pin.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
 - (planned) `scripts/apply-overlay.ps1`: copies `overlay/` into the checkout and applies `patches/`.
-- (planned) `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search
-  engines).
-- (planned) `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy
-  covers.
+- `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search engines).
+- `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy covers.
+  `orbis.cfg` runs in AutoConfig's sandbox: pref functions only, and its first line is skipped by Firefox.
+- `scripts/check-settings.py`: fails on unknown pref names, wrong pref types, invalid policies (checked against the
+  pinned source's `policies-schema.json`) and settings missing from `docs/SETTINGS.md`.
 - (planned) `overlay/browser/branding/orbis/`: name, icons, Store tiles.
 - (planned) `mozconfig`: build options.
-- (planned) `docs/SETTINGS.md`: one row per setting: what, why, locked or default, Android equivalent.
+- `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
+  Android.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.
 
 ## Design rules
@@ -63,7 +65,13 @@ Available now:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-firefox-currency.ps1   # is the pin current?
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-firefox.ps1            # pinned source (large)
+python -I scripts/check-settings.py                                                       # prefs and policies vs the source
 ```
+
+`check-settings.py` reads the checkout at `%USERPROFILE%\orbis_desktop_src\firefox` (or `--source DIR`). With only
+the four source files it needs (see the script's header) it still runs, but prefs that no pref file defines then
+fail, because it cannot search Firefox's code for them. `--ubo-assets FILE` also checks our uBlock Origin list set
+against uBlock Origin's `assets.json`.
 
 Planned:
 

@@ -23,7 +23,10 @@ Orbis Desktop is a private web browser for Windows. It is the desktop sibling of
 - HTTPS-only mode on by default.
 - No telemetry, no studies, no crash reports, no accounts, no sync, no sponsored content, no AI chat.
 
-TODO (Safe Browsing decision): one honest sentence about malware and phishing protection.
+Malware and phishing protection: Orbis blocks known malware and phishing sites with open blocklists in uBlock
+Origin. It does not use Google Safe Browsing, so it sends nothing to Google, but it catches new phishing pages
+later than Chrome or Firefox do. Orbis does not change Windows SmartScreen. Every setting and its reason
+is in `docs/SETTINGS.md`.
 
 ## What leaves your PC
 
@@ -40,7 +43,7 @@ release. Paths marked "planned" do not exist yet.
 |---|---|
 | `upstream/firefox.json` | The Firefox release tag and commit that Orbis is built from |
 | `scripts/` | Fetch the pinned Firefox source, check that it is current; later: apply the overlay, build, package, test |
-| `overlay/` | (planned) Branding, `policies.json`, `orbis.cfg`: files copied into the Firefox source tree |
+| `overlay/` | `distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`; (planned) branding: files copied into the Firefox build |
 | `patches/` | (planned) Changes to Mozilla's own files, kept as few as possible |
 | `mozconfig` | (planned) Build options |
 | `docs/` | Update guide; later: settings rationale, build guide, network audit, Store materials |
