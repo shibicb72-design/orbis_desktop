@@ -13,12 +13,15 @@ Phases:
   default  Starts Orbis without -profile (its real default profile) and records where the profile is and
            whether the Firefox and Orbis profile folders changed: b-dirs.json, b-before.json, b-after.json.
            Pass: the profile is under %APPDATA%\\Orbis and %LOCALAPPDATA%\\Orbis, and the Mozilla\\Firefox
-           profiles.ini and installs.ini hashes are the same before and after.
-  idle     New profile, headless, left idle for 3 minutes with a DNS log (MOZ_LOG nsHostResolver:5, dns.log*)
-           and TCP sampling (f-tcp.json); then prefs, policies, about:policies and uBlock Origin's filter lists
-           (checks-idle.json, aboutpolicies-idle.json/.png).
-  second   Second start of an idle profile (EXTRA = the profile folder): uBlock Origin re-applies its enforced
-           lists at launch (checks-second.json).
+           profiles.ini and installs.ini hashes are the same before and after. Refuses to start unless
+           INSTALL_DIR\\application.ini has Profile=Orbis and RemotingName=orbis (patch 0001 and the mozconfig),
+           so that a build without them never opens Firefox's profiles.
+  idle     New profile, headless, left idle for 3 minutes with a DNS log (MOZ_LOG timestamp,sync,
+           nsHostResolver:5, dns.log*; "sync" writes every line at once, so the release build's fast shutdown
+           loses nothing) and TCP sampling of the started process tree (f-tcp.json); then prefs, policies,
+           about:policies and uBlock Origin's filter lists (checks-idle.json, aboutpolicies-idle.json/.png).
+  second   Second start of an idle profile (EXTRA = the profile folder, which must be inside --profiles):
+           uBlock Origin re-applies its enforced lists at launch (checks-second.json).
   ui       New profile with a window: window titles, brand strings, main window and About dialog screenshots and
            the About dialog text (g-ui.json, g-main-window.png, g-about.png).
   hosts    Reads OUT_DIR's dns.log* files and prints each host name looked up, with a count. No browser.
@@ -28,15 +31,20 @@ Needs the Marionette client from the Firefox checkout (--source, default %USERPR
 Test profiles go to --profiles (default %USERPROFILE%\\orbis_desktop_src\\test-profiles). Every path must be on
 drive C:. The browser runs with MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 so that the checks can read chrome-side state;
 the profile's user.js sets remote.prefs.recommended to false, so Marionette does not change network prefs.
+Every phase that starts Orbis stops it at the end, also after an error: first through Marionette; if the started
+orbis.exe is still running after that, with taskkill /T /F on its PID. Only processes this script started (that
+PID and its orbis.exe children) are sampled, read or killed.
 """
 
 import argparse
 import collections
+import configparser
 import glob
 import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import time
@@ -59,15 +67,27 @@ def parse_args():
     return ap.parse_args()
 
 
-ARGS = parse_args()
-INSTALL = os.path.abspath(ARGS.install_dir)
-OUT = os.path.abspath(ARGS.out_dir)
-PROFILES = os.path.abspath(ARGS.profiles)
-EXE = os.path.join(INSTALL, "orbis.exe")
+def real_on_c(path):
+    """The full path with junctions and symbolic links resolved; exits unless it is on drive C:."""
+    real = os.path.realpath(os.path.abspath(path))
+    if real.startswith("\\\\?\\"):
+        real = real[4:]
+    if not real.upper().startswith("C:\\"):
+        sys.exit("REFUSED: every path must be on drive C: '%s' (resolves to '%s')" % (path, real))
+    return real
 
-for _p in (INSTALL, OUT, PROFILES, os.path.abspath(ARGS.source)):
-    if not _p.upper().startswith("C:\\"):
-        sys.exit("REFUSED: every path must be on drive C: '%s'" % _p)
+
+def is_inside(path, root):
+    """True if path is strictly below root (both resolved)."""
+    return os.path.normcase(path).startswith(os.path.normcase(root.rstrip("\\") + "\\"))
+
+
+ARGS = parse_args()
+INSTALL = real_on_c(ARGS.install_dir)
+OUT = real_on_c(ARGS.out_dir)
+PROFILES = real_on_c(ARGS.profiles)
+SOURCE = real_on_c(ARGS.source)
+EXE = os.path.join(INSTALL, "orbis.exe")
 os.makedirs(OUT, exist_ok=True)
 
 
@@ -82,7 +102,7 @@ def dump(name, obj):
 
 def load_marionette():
     """Puts the checkout's Marionette client and mozbase on sys.path and returns the Marionette class."""
-    src = os.path.abspath(ARGS.source)
+    src = SOURCE
     client = os.path.join(src, "testing", "marionette", "client")
     if not os.path.isdir(client):
         sys.exit("No Marionette client at %s (use --source)" % client)
@@ -150,16 +170,67 @@ def connect(port, timeout=90):
             time.sleep(3)
 
 
-def quit_browser(m, proc):
+def new_profile(kind):
+    """A new profile folder name under PROFILES, unique per run (date, time to the second, random suffix)."""
+    return os.path.join(PROFILES, "%s-%s-%s" % (kind, time.strftime("%Y%m%d-%H%M%S"), secrets.token_hex(3)))
+
+
+def process_tree(root_pid):
+    """PIDs of root_pid and its descendants, following parent links, keeping only orbis.exe processes."""
+    ps = ("Get-CimInstance Win32_Process | ForEach-Object "
+          "{ '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $_.Name }")
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True)
+    children = collections.defaultdict(list)
+    names = {}
+    for line in r.stdout.splitlines():
+        parts = line.strip().split(" ", 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            pid, ppid = int(parts[0]), int(parts[1])
+            names[pid] = parts[2].strip().lower()
+            if pid != ppid:
+                children[ppid].append(pid)
+    found, todo = set(), [root_pid]
+    while todo:
+        pid = todo.pop()
+        if pid in found or names.get(pid) != "orbis.exe":
+            continue
+        found.add(pid)
+        todo.extend(children.get(pid, []))
+    return found
+
+
+def stop_browser(proc, m=None):
+    """Quits the started Orbis through Marionette (if connected); then kills what is left of its process tree."""
+    if proc is None:
+        return
+    tree = process_tree(proc.pid) if proc.poll() is None else set()
+    if m is not None:
+        try:
+            m._send_message("Marionette:Quit", {"flags": ["eAttemptQuit"]})
+        except Exception as e:  # noqa: BLE001
+            log("quit message:", type(e).__name__, e)
     try:
-        m._send_message("Marionette:Quit", {"flags": ["eAttemptQuit"]})
-    except Exception as e:  # noqa: BLE001
-        log("quit message:", type(e).__name__, e)
-    try:
-        proc.wait(60)
+        proc.wait(60 if m is not None else 1)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        log("Orbis still running: taskkill /T /F /PID %d" % proc.pid)
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+        try:
+            proc.wait(30)
+        except subprocess.TimeoutExpired:
+            log("WARNING: PID %d did not exit" % proc.pid)
+    # Child processes that outlived the started orbis.exe: same PIDs, and still orbis.exe children of that tree.
+    left = tree & set(process_tree_names_orbis())
+    for pid in sorted(left - {proc.pid}):
+        log("taskkill /F /PID %d (left over from the started Orbis)" % pid)
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
     log("exit code", proc.returncode)
+
+
+def process_tree_names_orbis():
+    """PIDs of all running orbis.exe processes (used only to intersect with a tree recorded earlier)."""
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command",
+                        "(Get-Process orbis -ErrorAction SilentlyContinue).Id"], capture_output=True, text=True)
+    return [int(x) for x in r.stdout.split() if x.isdigit()]
 
 
 def chrome(m, script, args=None):
@@ -167,18 +238,12 @@ def chrome(m, script, args=None):
         return m.execute_async_script(script, script_args=args or [], script_timeout=60000)
 
 
-def orbis_pids():
-    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command",
-                        "(Get-Process orbis -ErrorAction SilentlyContinue).Id"], capture_output=True, text=True)
-    return {int(x) for x in r.stdout.split()}
-
-
-def win_titles():
-    """Visible top-level window titles of orbis.exe processes (Win32)."""
+def win_titles(root_pid):
+    """Visible top-level window titles of the started orbis.exe and its child processes (Win32)."""
     import ctypes
     from ctypes import wintypes
     u = ctypes.windll.user32
-    pids = orbis_pids()
+    pids = process_tree(root_pid)
     titles = []
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -293,8 +358,12 @@ def run_checks(m, tag):
     return res
 
 
-def sample_tcp(conns):
-    ps = ("$p = Get-Process orbis -ErrorAction SilentlyContinue | Select-Object -Expand Id; "
+def sample_tcp(conns, root_pid):
+    """Adds the remote (address, port) pairs of the started process tree's TCP connections to conns."""
+    pids = process_tree(root_pid)
+    if not pids:
+        return
+    ps = ("$p = @(" + ",".join(str(p) for p in sorted(pids)) + "); "
           "if ($p) { Get-NetTCPConnection -OwningProcess $p -ErrorAction SilentlyContinue | "
           "Where-Object { $_.RemoteAddress -notin '0.0.0.0','::','127.0.0.1','::1' } | "
           "ForEach-Object { '{0} {1} {2} {3}' -f $_.OwningProcess, $_.RemoteAddress, $_.RemotePort, $_.State } }")
@@ -305,17 +374,39 @@ def sample_tcp(conns):
             conns.add((parts[1], parts[2]))
 
 
+def check_application_ini():
+    """Exits unless application.ini keeps Orbis's profiles and remoting apart from Firefox's."""
+    path = os.path.join(INSTALL, "application.ini")
+    cp = configparser.ConfigParser(interpolation=None)
+    cp.optionxform = str
+    try:
+        with open(path, encoding="utf-8") as f:
+            cp.read_file(f)
+        profile = cp.get("App", "Profile", fallback=None)
+        remoting = cp.get("App", "RemotingName", fallback=None)
+    except (OSError, configparser.Error) as e:
+        sys.exit("REFUSED: cannot read %s: %s" % (path, e))
+    if profile != "Orbis" or remoting != "orbis":
+        sys.exit("REFUSED: %s has Profile=%s and RemotingName=%s; the default phase needs Profile=Orbis and "
+                 "RemotingName=orbis, or it would use Firefox's profiles" % (path, profile, remoting))
+
+
 def phase_default():
+    check_application_ini()
     before = tree_state()
     dump("b-before.json", before)
-    proc = launch(None, 2828, headless=True, no_profile=True)
-    m = connect(2828)
-    time.sleep(20)
-    info = chrome(m, "const d=arguments[arguments.length-1]; d({profD: Services.dirsvc.get('ProfD', Ci.nsIFile).path,"
-                     " localD: Services.dirsvc.get('ProfLD', Ci.nsIFile).path,"
-                     " defRoot: Services.dirsvc.get('DefProfRt', Ci.nsIFile).path});")
-    dump("b-dirs.json", info)
-    quit_browser(m, proc)
+    proc = m = None
+    try:
+        proc = launch(None, 2828, headless=True, no_profile=True)
+        m = connect(2828)
+        time.sleep(20)
+        info = chrome(m, "const d=arguments[arguments.length-1];"
+                         " d({profD: Services.dirsvc.get('ProfD', Ci.nsIFile).path,"
+                         " localD: Services.dirsvc.get('ProfLD', Ci.nsIFile).path,"
+                         " defRoot: Services.dirsvc.get('DefProfRt', Ci.nsIFile).path});")
+        dump("b-dirs.json", info)
+    finally:
+        stop_browser(proc, m)
     time.sleep(3)
     after = tree_state()
     dump("b-after.json", after)
@@ -323,21 +414,24 @@ def phase_default():
 
 
 def phase_idle():
-    prof = os.path.join(PROFILES, "idle-" + time.strftime("%H%M%S"))
+    prof = new_profile("idle")
     dnslog = os.path.join(OUT, "dns.log")
-    proc = launch(prof, 28282, headless=True,
-                  extra_env={"MOZ_LOG": "timestamp,nsHostResolver:5", "MOZ_LOG_FILE": dnslog})
-    conns = set()
-    t0 = time.time()
-    while time.time() - t0 < 180:
-        sample_tcp(conns)
-        time.sleep(4)
-    dump("f-tcp.json", sorted(conns))
-    m = connect(28282)
-    res = run_checks(m, "idle")
-    sample_tcp(conns)
-    dump("f-tcp.json", sorted(conns))
-    quit_browser(m, proc)
+    proc = m = None
+    try:
+        proc = launch(prof, 28282, headless=True,
+                      extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5", "MOZ_LOG_FILE": dnslog})
+        conns = set()
+        t0 = time.time()
+        while time.time() - t0 < 180:
+            sample_tcp(conns, proc.pid)
+            time.sleep(4)
+        dump("f-tcp.json", sorted(conns))
+        m = connect(28282)
+        res = run_checks(m, "idle")
+        sample_tcp(conns, proc.pid)
+        dump("f-tcp.json", sorted(conns))
+    finally:
+        stop_browser(proc, m)
     log("profile:", prof)
     log(json.dumps({k: res.get(k) for k in ("policiesStatus", "ubo", "selectedFilterLists", "error")}, indent=1))
 
@@ -345,18 +439,33 @@ def phase_idle():
 def phase_second():
     if not ARGS.extra:
         sys.exit("second: give the idle profile folder as EXTRA")
-    proc = launch(ARGS.extra, 28282, headless=True)
-    m = connect(28282)
-    time.sleep(30)
-    res = run_checks(m, "second")
-    quit_browser(m, proc)
+    prof = real_on_c(ARGS.extra)
+    if not is_inside(prof, PROFILES) or not os.path.isdir(prof):
+        sys.exit("REFUSED: the profile must be an existing folder inside %s: '%s'" % (PROFILES, prof))
+    proc = m = None
+    try:
+        proc = launch(prof, 28282, headless=True)
+        m = connect(28282)
+        time.sleep(30)
+        res = run_checks(m, "second")
+    finally:
+        stop_browser(proc, m)
     log(json.dumps({k: res.get(k) for k in ("ubo", "selectedFilterLists", "uboStorageKeys", "error")}, indent=1))
 
 
 def phase_ui():
-    prof = os.path.join(PROFILES, "ui-" + time.strftime("%H%M%S"))
-    proc = launch(prof, 28283, headless=False)
-    m = connect(28283)
+    prof = new_profile("ui")
+    proc = m = None
+    try:
+        proc = launch(prof, 28283, headless=False)
+        m = connect(28283)
+        out = ui_checks(m, proc.pid)
+    finally:
+        stop_browser(proc, m)
+    log(json.dumps({k: v for k, v in out.items() if k != "aboutText"}, indent=1))
+
+
+def ui_checks(m, root_pid):
     time.sleep(8)
     out = {}
     with m.using_context("chrome"):
@@ -365,7 +474,7 @@ def phase_ui():
         out["brand"] = m.execute_script("""
           const b = Services.strings.createBundle('chrome://branding/locale/brand.properties');
           return {short: b.GetStringFromName('brandShortName'), full: b.GetStringFromName('brandFullName')};""")
-        out["win32TitlesMain"] = win_titles()
+        out["win32TitlesMain"] = win_titles(root_pid)
         with open(os.path.join(OUT, "g-main-window.png"), "wb") as f:
             f.write(m.screenshot(format="binary"))
         dump("g-ui.json", out)
@@ -390,15 +499,14 @@ def phase_ui():
             "const v=document.getElementById('version'); return v ? v.textContent : null")
         with open(os.path.join(OUT, "g-about.png"), "wb") as f:
             f.write(m.screenshot(format="binary"))
-        out["win32TitlesWithAbout"] = win_titles()
+        out["win32TitlesWithAbout"] = win_titles(root_pid)
         dump("g-ui.json", out)
         m.execute_script("window.close()")
         time.sleep(1)
         m.switch_to_window(m.chrome_window_handles[0])
-        out["win32Titles"] = win_titles()
+        out["win32Titles"] = win_titles(root_pid)
     dump("g-ui.json", out)
-    quit_browser(m, proc)
-    log(json.dumps({k: v for k, v in out.items() if k != "aboutText"}, indent=1))
+    return out
 
 
 def phase_hosts():

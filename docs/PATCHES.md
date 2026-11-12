@@ -37,7 +37,7 @@ Order: `fetch-firefox.ps1`, then `apply-patches.ps1`, then `apply-overlay.ps1` (
 |---|---|---|---|
 | `0001-profile-folder-orbis.patch` | `browser/moz.configure` | Adds `imply_option("MOZ_APP_PROFILE", "Orbis")` | `MOZ_APP_PROFILE` is a `project_flag` (`toolkit/moz.configure`): it takes only "implied" values from a project's `moz.configure`, not a mozconfig option or environment variable |
 | `0002-version-resource-orbis.patch` | `browser/app/module.ver`, `browser/app/pbproxy/module.ver`, `ipc/app/module.ver` | `WIN32_MODULE_COMPANYNAME` `Mozilla Corporation` becomes `Orbis`; `WIN32_MODULE_TRADEMARKS` `Firefox is a Trademark of The Mozilla Foundation.` becomes empty (added, empty, to `ipc/app/module.ver`) | These files are read as they are by `config/create_rc.py`; no build option sets them |
-| `0003-about-dialog-orbis.patch` | `browser/base/content/aboutDialog.xhtml`, `browser/base/content/aboutDialog.js`, `browser/locales/en-US/browser/aboutDialog.ftl` | About dialog: `community-2` and `community-exp` say "Orbis is built from Mozilla's Firefox source code and is not affiliated with Mozilla." with no links; the `helpus` and `helpus-referrals2` blurbs ("Make a donation", "get involved!", "share Firefox") and their links are removed | The strings live in `browser/locales`, not in the branding folder, and the links are hard-coded in `aboutDialog.xhtml`; no pref or policy hides them |
+| `0003-about-dialog-orbis.patch` | `browser/base/content/aboutDialog.xhtml`, `browser/base/content/aboutDialog.js`, `browser/locales/en-US/browser/aboutDialog.ftl` | About dialog: a new string `orbis-about-description` replaces `community-2` and `community-exp`, with no links; the `helpus` and `helpus-referrals2` blurbs ("Make a donation", "get involved!", "share Firefox"), the "Terms of Use" and "Privacy Notice" links and their strings are removed | The strings live in `browser/locales`, not in the branding folder, and the links are hard-coded in `aboutDialog.xhtml`; no pref or policy hides them |
 
 ### 0001: profile folder
 
@@ -100,17 +100,24 @@ the Web open, public and accessible to all." and "Want to help? Make a donation 
 community ...", and the branding's `-vendor-short-name` is "Orbis", so the sentence is false. In
 `aboutDialog.xhtml` the vendor name links to `www.mozilla.org`, "global community" to `about:credits` (Mozilla's
 contributors), "Make a donation" to `foundation.mozilla.org` and "get involved!" to `www.mozilla.org/contribute`.
-None of that is about Orbis.
+The bottom links "Terms of Use" and "Privacy Notice" opened Mozilla's terms and privacy notice for Firefox. None
+of that is about Orbis.
 
 What the patch does:
 
-- `aboutDialog.ftl`: `community-2` (release) and `community-exp` (shown instead on pre-release "a" versions) become
-  "{ -brand-short-name } is built from Mozilla's Firefox source code and is not affiliated with Mozilla.", with
-  no links. `helpus` and `helpus-referrals2` are deleted.
-- `aboutDialog.xhtml`: the link elements inside `communityDesc` and `communityExperimentalDesc` are removed (a
-  Fluent message without a `data-l10n-name` element drops the template link anyway; removing them keeps the
-  mozilla.org URLs out of the dialog). The `contributeDesc` and `contributeDescReferrals` blurbs are removed, and
-  `contributeDesc` is taken out of `aria-describedby`.
+- `aboutDialog.ftl`: a new string, `orbis-about-description`: "{ -brand-short-name } is an independent browser
+  that puts privacy first: it blocks trackers by default and comes with uBlock Origin." (wording to confirm with
+  Shibi). It does not repeat the attribution: "Orbis is based on Mozilla's Firefox source code and is not made or
+  endorsed by Mozilla. ..." is already `trademarkInfo` in the branding's `brand.ftl`, shown at the bottom of the
+  same dialog. `community-2`, `community-exp`, `helpus`, `helpus-referrals2`, `bottom-links-terms` and
+  `bottom-links-privacy` are deleted. A new id rather than new text under the old ids: Fluent ids name what a
+  string means, and no Firefox id should carry Orbis's text. One id serves both elements because the text is the
+  same.
+- `aboutDialog.xhtml`: `communityDesc` (release) and `communityExperimentalDesc` (shown instead on pre-release
+  "a" versions) both use `orbis-about-description` and lose their link elements. The `contributeDesc` and
+  `contributeDescReferrals` blurbs are removed, and `contributeDesc` is taken out of `aria-describedby`. The
+  "Terms of Use" and "Privacy Notice" links are removed; "Licensing Information" (`about:license`) stays. An Orbis
+  privacy-policy link comes later, with Orbis's own policy.
 - `aboutDialog.js`: the code that switched between the two blurbs (by `browser.referrals.enabled`), rewrote
   `aria-describedby` and opened the "share Firefox" referral tab is removed, with the now unused `Referrals`
   import. Without it, `init()` would throw on the missing elements.
@@ -119,9 +126,6 @@ Why no setting can do it: the strings and links are in Mozilla's files outside `
 CSS (`chrome://branding/content/aboutDialog.css`) could hide the blurbs, but screen readers would still read them,
 because `aria-describedby` names them (see the comment in `aboutDialog.js`), and the false `community-2` text would
 stay.
-
-Left as they are (open items in `docs/BRANDING.md`): the bottom links "Terms of Use" and "Privacy Notice" still
-open Mozilla's Firefox terms and privacy notice; the `trademarkInfo` line already gives the attribution.
 
 Not run: Firefox's own test `browser/base/content/test/browser-about/browser_aboutDialog_referrals.js` checks the
 removed blurbs and will fail; Orbis does not run Mozilla's browser tests. The dialog itself is checked by
@@ -142,10 +146,12 @@ the profile collision is unfixed (`docs/BRANDING.md`):
 4. Start Firefox: it opens its own profile with no "profile missing" or "older version" prompt.
 5. With Firefox running, start Orbis: it opens its own window, not a new Firefox window, and vice versa.
 
-About dialog (patch 0003): `scripts/verify-build.py ui` saves the dialog text as `aboutText` in `g-ui.json` and a
-screenshot as `g-about.png`. Pass: the text has "Orbis is built from Mozilla’s Firefox source code and is not
-affiliated with Mozilla." (typographic apostrophe, U+2019, as in Firefox's strings) and no "designed by", "global community", "donation" or "get involved"; the dialog has
-no link to `mozilla.org` other than the two bottom links named above.
+About dialog (patch 0003): `scripts/verify-build.py ui` saves the visible dialog text as `aboutVisibleText`, the
+visible links as `aboutLinks` (both in `g-ui.json`) and a screenshot as `g-about.png`. (`aboutText` also has
+hidden elements, such as the "Extended Support Release" label; do not judge by it.) Pass: `aboutVisibleText` has
+"Orbis is an independent browser that puts privacy first" and the `trademarkInfo` line, and none of "designed
+by", "global community", "donation", "get involved", "Terms of Use" or "Privacy Notice"; `aboutLinks` is only
+`about:license`.
 
 Version resource: on the built `orbis.exe`, `private_browsing.exe` and `plugin-container.exe`, File Properties >
 Details (or `(Get-Item orbis.exe).VersionInfo`) shows `CompanyName` Orbis, empty `LegalTrademarks`, and no

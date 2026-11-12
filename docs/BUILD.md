@@ -159,15 +159,19 @@ The script's header lists every output file. What to compare:
 
 - `default`: `b-dirs.json` puts the profile under `%APPDATA%\Orbis` and `%LOCALAPPDATA%\Orbis`; in `b-before.json`
   and `b-after.json` the `%APPDATA%\Mozilla\Firefox` `profiles.ini` and `installs.ini` hashes are the same. This
-  phase starts Orbis with its real default profile; the rest use new profiles under
-  `%USERPROFILE%\orbis_desktop_src\test-profiles`.
+  phase starts Orbis with its real default profile, so it refuses to run unless the install's `application.ini`
+  has `Profile=Orbis` and `RemotingName=orbis`. The other phases use new, uniquely named profiles under
+  `%USERPROFILE%\orbis_desktop_src\test-profiles`; `second` accepts only a profile inside that folder. Every phase
+  stops the Orbis it started, also after an error (Marionette quit, then `taskkill /T /F` on its PID).
 - `idle`: in `checks-idle.json` every pref has the value and lock state in `docs/SETTINGS.md`, `policiesStatus`
   equals `STATUS_ACTIVE`, `about:policies` shows no errors, uBlock Origin is installed and active, and
   `selectedFilterLists` matches the `3rdparty` policy.
 - `hosts`: every host is in `docs/SETTINGS.md`, "Network calls that remain". A new host must be added there with a
-  reason, or blocked, before release.
-- `ui`: window titles say "Orbis"; `g-main-window.png` shows no Firefox logo or Firefox-branded top site;
-  `g-about.png` and `aboutVisibleText` in `g-ui.json` match the About dialog test in `docs/PATCHES.md`.
+  reason, or blocked, before release. The idle phase logs with `MOZ_LOG=timestamp,sync,nsHostResolver:5`: without
+  `sync`, the first build's DNS log lost everything after the first 30 seconds when the release build shut down.
+- `ui`: window titles say "Orbis"; `g-main-window.png` shows no Firefox logo and no default top sites;
+  `g-about.png`, `aboutVisibleText` and `aboutLinks` in `g-ui.json` pass the About dialog test in
+  `docs/PATCHES.md` (judge by `aboutVisibleText`, not `aboutText`, which includes hidden elements).
 
 Not covered yet: the MSIX package, the Firefox-installed profile test from `docs/PATCHES.md` on a separate PC,
 and the version resources of the binaries (`(Get-Item orbis.exe).VersionInfo`).

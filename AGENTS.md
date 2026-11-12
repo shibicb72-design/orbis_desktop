@@ -37,8 +37,8 @@ Items marked "planned" do not exist yet.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
 - `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
   `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`), the
-  executables' version resource (company Orbis, no Firefox trademark line) and the About dialog text (no Mozilla
-  community or donation links).
+  executables' version resource (company Orbis, no Firefox trademark line) and the About dialog (no Mozilla
+  community, donation, terms or privacy links).
 - `scripts/apply-patches.ps1`: applies `patches/*.patch` to the pinned checkout after `git apply --check`; refuses
   a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing. Run it before `apply-overlay.ps1`.
 - `scripts/apply-overlay.ps1`: copies the branding to `browser/branding/orbis/`, `mozconfig` to the checkout's
