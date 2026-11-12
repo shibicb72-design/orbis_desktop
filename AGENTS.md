@@ -35,18 +35,24 @@ Items marked "planned" do not exist yet.
 - `scripts/check-firefox-currency.ps1`: exits non-zero when Mozilla's latest release is newer than the pin, or when
   the pin is that release but still a `_BUILD` tag or not the commit of its `_RELEASE` tag.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
-- (planned) `scripts/apply-overlay.ps1`: copies `overlay/` into the checkout.
 - `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
   `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`) and the
   executables' version resource (company Orbis, no Firefox trademark line).
 - `scripts/apply-patches.ps1`: applies `patches/*.patch` to the pinned checkout after `git apply --check`; refuses
-  a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing.
+  a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing. Run it before `apply-overlay.ps1`.
+- `scripts/apply-overlay.ps1`: copies the branding to `browser/branding/orbis/`, `mozconfig` to the checkout's
+  top, and the policy files to `orbis-dist/` (install-folder layout, for packaging). Refuses any destination
+  outside the checkout, through a junction, or tracked by Firefox's git, and refuses everything until
+  `browser/moz.configure` sets `MOZ_APP_PROFILE` (patch 0001: the profile build blocker). It does not apply
+  `patches/`.
+- `scripts/make-placeholder-branding.ps1`: redraws the TODO placeholder images.
 - (planned) `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search
   engines).
 - (planned) `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy
   covers.
-- (planned) `overlay/browser/branding/orbis/`: name, icons, Store tiles.
-- (planned) `mozconfig`: build options.
+- `overlay/browser/branding/orbis/`: name "Orbis"; icons and Store tiles are TODO placeholders. See
+  `docs/BRANDING.md` for the trademark rules.
+- `mozconfig`: Windows x64 release build options. `scripts/check-mozconfig.py` checks them against the source.
 - (planned) `docs/SETTINGS.md`: one row per setting: what, why, locked or default, Android equivalent.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.
 
@@ -68,7 +74,9 @@ Available now:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-firefox-currency.ps1   # is the pin current?
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-firefox.ps1            # pinned source (large)
+python -I scripts/check-mozconfig.py                                                      # mozconfig options vs the source
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-patches.ps1 -Check     # do the patches apply?
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-overlay.ps1 -DryRun    # what would be copied
 ```
 
 Planned:

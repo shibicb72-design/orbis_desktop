@@ -5,3 +5,6 @@ LICENSE text eol=lf
 *.ps1 text eol=crlf
 # Patches to Mozilla's files are applied byte for byte (one upstream file has CRLF endings): never convert them.
 patches/** -text
+# Files copied into the Firefox checkout keep LF on every platform (binary files stay binary: text=auto).
+mozconfig text eol=lf
+overlay/** text=auto eol=lf
