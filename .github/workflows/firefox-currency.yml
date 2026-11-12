@@ -41,6 +41,10 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "code=$code" -Encoding ascii
           if ($code -eq 0) { exit 0 }
           if ($code -eq 1) {
+            if (-not (Test-Path -LiteralPath $report)) {
+              Write-Output "::error title=Firefox currency check failed::Exit 1 but no report file. No issue was changed."
+              exit 1
+            }
             $r = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
             Write-Output ("::warning title=Firefox pin {0}::{1}" -f $r.status, ($r.message -replace '%', '%25'))
             if ($r.majorsBehind -ge 2) {

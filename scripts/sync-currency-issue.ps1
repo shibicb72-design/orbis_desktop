@@ -65,6 +65,9 @@ function Invoke-Gh {
 function New-IssueBody {
     param($Report, [string]$Today)
 
+    # Every value below comes from the report, whose fields check-firefox-currency.ps1 has validated
+    # (versions, dates, tag, SHA) or built itself. No exception text, so feed hiccups do not change it.
+    $first = if ($Report.firstNewVersion) { $Report.firstNewVersion } else { 'unknown' }
     $release = if ($Report.releaseDate) { $Report.releaseDate } else { 'unknown' }
     $deadline = if ($Report.deadline) { $Report.deadline } else { 'unknown' }
     if ($Report.deadline -and $Today -and ([string]::CompareOrdinal($Today, $Report.deadline) -gt 0)) {
@@ -78,7 +81,8 @@ function New-IssueBody {
         '| | |',
         '|---|---|',
         ('| Latest Firefox | {0} |' -f $Report.latestVersion),
-        ('| Mozilla release date | {0} |' -f $release),
+        ('| First release the pin lacks | {0} |' -f $first),
+        ('| Mozilla release date of {0} | {1} |' -f $first, $release),
         ('| Orbis deadline (release + 3 days) | {0} |' -f $deadline),
         ('| Pinned | {0} (`{1}`, `{2}`) |' -f $Report.pinnedVersion, $Report.pinnedTag, $Report.pinnedCommit),
         ('| Major versions behind | {0} |' -f $Report.majorsBehind),
@@ -91,6 +95,8 @@ function New-IssueBody {
     }
     $lines += @(
         ('Release date source: {0}' -f $Report.releaseDateFrom),
+        '',
+        'The deadline counts from the first release the pin lacks; later releases do not move it. "(passed)" uses the UTC date of the run.',
         '',
         'Move the pin as described in `docs/UPDATING.md`. This issue closes itself when the daily check passes.'
     )
@@ -134,7 +140,10 @@ try {
             [IO.File]::WriteAllText($bodyFile, $body, (New-Object Text.UTF8Encoding $false))
             try {
                 if ($open.Count -eq 0) {
-                    $null = Invoke-Gh label create $Label --repo $Repository --color 'b60205' --description 'Pinned Firefox is behind Mozilla (opened by the daily currency check)' --force
+                    $labels = Invoke-Gh label list --repo $Repository --search $Label --limit 100 --json name
+                    if (-not @($labels | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.name -ceq $Label }).Count) {
+                        $null = Invoke-Gh label create $Label --repo $Repository --color 'b60205' --description 'Pinned Firefox is behind Mozilla (opened by the daily currency check)'
+                    }
                     $url = Invoke-Gh issue create --repo $Repository --title $Title --label $Label --body-file $bodyFile
                     Write-Host "Opened $url"
                 } else {

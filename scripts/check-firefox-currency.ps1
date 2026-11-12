@@ -17,11 +17,13 @@ FIREFOX_<v>_RELEASE tag, and git ls-remote must show that tag at the pinned
 commit. A leftover release-candidate (_BUILD) pin, or a _RELEASE tag at a
 different commit, is stale.
 
-When the pin is behind or stale, the script also looks up Mozilla's release
-date of the latest version in the release-history feeds and prints the Orbis
-deadline (release date + 3 days) and how many major versions the pin is behind.
-A failed history lookup does not change the exit code; the date is then
-"unknown".
+When the pin is behind or stale, the script also prints the first release the
+pin lacks (the earliest release in Mozilla's history feeds newer than the pin;
+for a stale pin, the pinned version), its release date, the Orbis deadline
+(that date + 3 days) and how many major versions the pin is behind. A newer
+release does not move the deadline. If no history entry fits, the feed's
+LAST_RELEASE_DATE is used (an earlier or equal date: the safe side). A failed
+history lookup does not change the exit code; the date is then "unknown".
 
 Exit code 0: the pin is current (or ahead).
 Exit code 1: the pin is behind or stale; update it (docs/UPDATING.md).
@@ -65,37 +67,50 @@ $repoRoot = Split-Path -Parent $scriptDir
 if (-not $PinFile) { $PinFile = Join-Path $repoRoot 'upstream\firefox.json' }
 
 function Get-ReleaseDate {
-    # Mozilla's release date of $Version as yyyy-MM-dd, from the history feeds; falls back to the
-    # feed's LAST_RELEASE_DATE. Never throws: returns Date = $null and the reason in Source.
-    param([string]$Version, $Feed)
+    # The release that starts the 3-day clock: the earliest Mozilla release newer than the pin
+    # (-IncludePinned: the pinned version itself, for a stale pin), up to and including the latest.
+    # Read from both history feeds; falls back to the feed's LAST_RELEASE_DATE. Never throws.
+    # Exception text goes to stderr only, never into Source: the issue body must not change
+    # because a feed had a hiccup.
+    param($Pinned, $Latest, [string]$LatestText, [bool]$IncludePinned, $Feed)
 
-    $urls = @($MajorHistoryUrl, $StabilityHistoryUrl)
-    if ($Version -notmatch '^\d+\.0$') { $urls = @($StabilityHistoryUrl, $MajorHistoryUrl) }
-    $problems = @()
-    foreach ($url in $urls) {
+    $best = $null
+    $failed = $false
+    foreach ($url in @($MajorHistoryUrl, $StabilityHistoryUrl)) {
         try {
             $history = Invoke-RestMethod -Uri $url -UseBasicParsing -TimeoutSec 60
-            $prop = $history.PSObject.Properties[$Version]
-            if ($prop -and ([string]$prop.Value) -match '^\d{4}-\d{2}-\d{2}$') {
-                return @{ Date = [string]$prop.Value; Source = $url }
-            }
         } catch {
-            $problems += "$url failed: $($_.Exception.Message)"
+            [Console]::Error.WriteLine("Release history unavailable: $url : $($_.Exception.Message)")
+            $failed = $true
+            continue
+        }
+        foreach ($p in $history.PSObject.Properties) {
+            $name = [string]$p.Name
+            $date = [string]$p.Value
+            if ($name -notmatch '^\d+(\.\d+){1,3}\z' -or $date -notmatch '^\d{4}-\d{2}-\d{2}\z') { continue }
+            $v = ConvertTo-FirefoxVersion $name
+            if ($v -gt $Latest) { continue }
+            if ($IncludePinned) { if ($v -lt $Pinned) { continue } } elseif ($v -le $Pinned) { continue }
+            if (-not $best -or [string]::CompareOrdinal($date, $best.Date) -lt 0 -or
+                ($date -eq $best.Date -and $v -lt $best.V)) {
+                $best = @{ Version = $name; Date = $date; V = $v; Source = $url }
+            }
         }
     }
-    if ($Feed.PSObject.Properties.Name -contains 'LAST_RELEASE_DATE' -and
-        ([string]$Feed.LAST_RELEASE_DATE) -match '^\d{4}-\d{2}-\d{2}$') {
-        return @{ Date = [string]$Feed.LAST_RELEASE_DATE
-                  Source = "LAST_RELEASE_DATE in $VersionsUrl ($Version is not in the release history yet)" }
+    if ($best) { return $best }
+    $last = ''
+    if ($Feed.PSObject.Properties.Name -contains 'LAST_RELEASE_DATE') { $last = [string]$Feed.LAST_RELEASE_DATE }
+    if ($last -match '^\d{4}-\d{2}-\d{2}\z') {
+        return @{ Version = $LatestText; Date = $last
+                  Source = "LAST_RELEASE_DATE in $VersionsUrl (no newer release in the release history)" }
     }
-    $why = 'not in the release history'
-    if ($problems.Count) { $why = $problems -join '; ' }
-    return @{ Date = $null; Source = "unknown: $why" }
+    $why = if ($failed) { 'release history unavailable' } else { 'no newer release in the release history' }
+    return @{ Version = $null; Date = $null; Source = "unknown: $why" }
 }
 
 function Complete-Check {
     # Prints the verdict, writes the report and exits.
-    param([int]$Code, [string]$Status, [string]$Message, $Feed, [string]$LatestText, $Pin)
+    param([int]$Code, [string]$Status, [string]$Message, $Feed, [string]$LatestText, $Pin, $NextReleaseDate)
 
     $report = [ordered]@{
         status          = $Status
@@ -105,30 +120,32 @@ function Complete-Check {
         pinnedTag       = $Pin.Tag
         pinnedCommit    = $Pin.Commit
         majorsBehind    = 0
+        firstNewVersion = $null
         releaseDate     = $null
         releaseDateFrom = $null
         deadline        = $null
-        nextReleaseDate = $null
-    }
-    if ($Feed.PSObject.Properties.Name -contains 'NEXT_RELEASE_DATE') {
-        $report.nextReleaseDate = [string]$Feed.NEXT_RELEASE_DATE
+        nextReleaseDate = $NextReleaseDate
     }
     if ($Code -eq 0) {
         Write-Host $Message
     } else {
         [Console]::Error.WriteLine($Message)
-        $behind = (ConvertTo-FirefoxVersion $LatestText).Major - (ConvertTo-FirefoxVersion $Pin.Version).Major
+        $latest = ConvertTo-FirefoxVersion $LatestText
+        $pinned = ConvertTo-FirefoxVersion $Pin.Version
+        $behind = $latest.Major - $pinned.Major
         if ($behind -gt 0) { $report.majorsBehind = $behind }
-        $release = Get-ReleaseDate -Version $LatestText -Feed $Feed
+        $release = Get-ReleaseDate -Pinned $pinned -Latest $latest -LatestText $LatestText -IncludePinned ($Status -eq 'stale') -Feed $Feed
+        $report.firstNewVersion = $release.Version
         $report.releaseDate = $release.Date
         $report.releaseDateFrom = $release.Source
         if ($release.Date) {
             $report.deadline = [datetime]::ParseExact($release.Date, 'yyyy-MM-dd',
                 [Globalization.CultureInfo]::InvariantCulture).AddDays(3).ToString('yyyy-MM-dd')
         }
+        $firstText = if ($release.Version) { $release.Version } else { 'unknown' }
         $dateText = if ($release.Date) { $release.Date } else { 'unknown' }
         $deadlineText = if ($report.deadline) { $report.deadline } else { 'unknown' }
-        [Console]::Error.WriteLine(("{0} released {1}; Orbis deadline (release + 3 days) {2}; pin is {3} major version(s) behind." -f $LatestText, $dateText, $deadlineText, $report.majorsBehind))
+        [Console]::Error.WriteLine(("First release the pin lacks: {0}, released {1}; Orbis deadline (release + 3 days) {2}; pin is {3} major version(s) behind." -f $firstText, $dateText, $deadlineText, $report.majorsBehind))
         if ($report.majorsBehind -ge 2) {
             [Console]::Error.WriteLine("WARNING: Microsoft Store policy 10.2.1 allows at most 2 major versions behind Firefox.")
         }
@@ -158,11 +175,16 @@ try {
     $latest = ConvertTo-FirefoxVersion $latestText
     $pinned = ConvertTo-FirefoxVersion $pin.Version
 
+    # NEXT_RELEASE_DATE goes into the log and the issue body: accept a plain date only, so a feed
+    # value cannot become a workflow command, a Markdown link or an @mention.
     $next = ''
-    if ($feed.PSObject.Properties.Name -contains 'NEXT_RELEASE_DATE') {
-        $next = "; next release date in feed: $($feed.NEXT_RELEASE_DATE)"
+    $nextDate = $null
+    if ($feed.PSObject.Properties.Name -contains 'NEXT_RELEASE_DATE' -and
+        ([string]$feed.NEXT_RELEASE_DATE) -match '^\d{4}-\d{2}-\d{2}\z') {
+        $nextDate = [string]$feed.NEXT_RELEASE_DATE
+        $next = "; next release date in feed: $nextDate"
     }
-    $done = @{ Feed = $feed; LatestText = $latestText; Pin = $pin }
+    $done = @{ Feed = $feed; LatestText = $latestText; Pin = $pin; NextReleaseDate = $nextDate }
 
     if ($latest -gt $pinned) {
         Complete-Check @done -Code 1 -Status 'behind' -Message ("BEHIND: Mozilla's latest Firefox is {0}, newer than the pinned {1} ({2}){3}. See docs/UPDATING.md." -f $latestText, $pin.Version, $pin.Tag, $next)
@@ -173,7 +195,7 @@ try {
 
     # Same version as the release: the pin must be the _RELEASE tag, and that tag must be the pinned
     # commit. A release-candidate (_BUILD) pin left over after release day is stale.
-    if ($pin.Tag -notmatch '_RELEASE$') {
+    if ($pin.Tag -notmatch '_RELEASE\z') {
         Complete-Check @done -Code 1 -Status 'stale' -Message ("STALE: {0} has been released, but the pin is still the release candidate {1}. Switch to the _RELEASE tag. See docs/UPDATING.md." -f $latestText, $pin.Tag)
     }
     $releaseRef = "refs/tags/$($pin.Tag)"
