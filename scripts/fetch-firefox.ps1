@@ -1,6 +1,6 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 <#
 .SYNOPSIS
@@ -29,7 +29,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\fetch-firefox.ps1
 #>
 [CmdletBinding()]
 param(
-    [string]$Destination = (Join-Path $env:USERPROFILE 'orbis_desktop_src\firefox'),
+    [string]$Destination = '',
     [string]$PinFile = ''
 )
 
@@ -76,7 +76,13 @@ try {
     $pin = Read-FirefoxPin -Path $PinFile
     Write-Host ("Pin: {0} = {1} from {2}" -f $pin.Tag, $pin.Commit, $pin.Repository)
 
-    # --- Where the checkout may go -------------------------------------------------------------
+    # --- Where the checkout may go (checks only; nothing is created yet) -------------------------
+    if (-not $Destination) {
+        if ([string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+            throw "USERPROFILE is not set; pass -Destination."
+        }
+        $Destination = Join-Path $env:USERPROFILE 'orbis_desktop_src\firefox'
+    }
     $dest = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($Destination)
     $dest = [System.IO.Path]::GetFullPath($dest).TrimEnd('\')
     if (-not $dest.StartsWith('C:\', [StringComparison]::OrdinalIgnoreCase) -or $dest.Length -le 3) {
@@ -87,7 +93,9 @@ try {
         throw "Destination must be outside the Orbis repository '$repoRoot' and must not contain it: '$dest'"
     }
 
-    if (Test-Path -LiteralPath $dest) {
+    $destExists = Test-Path -LiteralPath $dest
+    $isCheckout = $false
+    if ($destExists) {
         if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
             throw "Destination exists and is not a folder: '$dest'"
         }
@@ -101,14 +109,32 @@ try {
             if ($origin.Count -eq 0 -or $origin[0] -ne $pin.Repository) {
                 throw ("Destination is a git repository whose origin is '{0}', not '{1}'. Refusing to reuse it." -f ($origin -join ' '), $pin.Repository)
             }
+            $isCheckout = $true
         } elseif (@(Get-ChildItem -LiteralPath $dest -Force).Count -gt 0) {
             throw "Destination exists, is not empty and is not a git checkout. Refusing to write into it: '$dest'"
-        } else {
-            Invoke-Git -GitArgs @('init', '-q', $dest) | Out-Null
-            Invoke-Git -GitArgs @('-C', $dest, 'remote', 'add', 'origin', $pin.Repository) | Out-Null
         }
-    } else {
-        New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    }
+
+    # --- Check the remote before creating or downloading anything ------------------------------
+    $tagRef = "refs/tags/$($pin.Tag)"
+    $lines = Invoke-Git -GitArgs @('ls-remote', $pin.Repository, $tagRef, "$tagRef^{}")
+    $direct = $null; $peeled = $null
+    foreach ($line in $lines) {
+        $f = $line -split "`t"
+        if ($f.Count -ne 2) { continue }
+        if ($f[1] -eq $tagRef) { $direct = $f[0] }
+        if ($f[1] -eq "$tagRef^{}") { $peeled = $f[0] }
+    }
+    if (-not $direct) { throw "Tag $($pin.Tag) not found on $($pin.Repository). Nothing was created or fetched." }
+    $remoteCommit = if ($peeled) { $peeled } else { $direct }
+    if ($remoteCommit -ne $pin.Commit) {
+        throw ("REFUSED: remote tag {0} points at {1}, but the pin says {2}. Nothing was created or fetched." -f $pin.Tag, $remoteCommit, $pin.Commit)
+    }
+    Write-Host "Remote tag matches the pin. Fetching (depth 1); the first run downloads several GB."
+
+    # --- Create the checkout if needed ---------------------------------------------------------
+    if (-not $isCheckout) {
+        if (-not $destExists) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
         Invoke-Git -GitArgs @('init', '-q', $dest) | Out-Null
         Invoke-Git -GitArgs @('-C', $dest, 'remote', 'add', 'origin', $pin.Repository) | Out-Null
     }
@@ -117,23 +143,6 @@ try {
     # and allow the long paths that exist in the Firefox tree.
     Invoke-Git -GitArgs @('-C', $dest, 'config', 'core.autocrlf', 'false') | Out-Null
     Invoke-Git -GitArgs @('-C', $dest, 'config', 'core.longpaths', 'true') | Out-Null
-
-    # --- Check the remote before downloading anything large ------------------------------------
-    $tagRef = "refs/tags/$($pin.Tag)"
-    $lines = Invoke-Git -GitArgs @('-C', $dest, 'ls-remote', 'origin', $tagRef, "$tagRef^{}")
-    $direct = $null; $peeled = $null
-    foreach ($line in $lines) {
-        $f = $line -split "`t"
-        if ($f.Count -ne 2) { continue }
-        if ($f[1] -eq $tagRef) { $direct = $f[0] }
-        if ($f[1] -eq "$tagRef^{}") { $peeled = $f[0] }
-    }
-    if (-not $direct) { throw "Tag $($pin.Tag) not found on $($pin.Repository)" }
-    $remoteCommit = if ($peeled) { $peeled } else { $direct }
-    if ($remoteCommit -ne $pin.Commit) {
-        throw ("REFUSED: remote tag {0} points at {1}, but the pin says {2}. Nothing was fetched." -f $pin.Tag, $remoteCommit, $pin.Commit)
-    }
-    Write-Host "Remote tag matches the pin. Fetching (depth 1); the first run downloads several GB."
 
     # --- Fetch exactly that tag, then check the fetched commit ---------------------------------
     # No '+' in the refspec: an existing local tag with a different value makes git refuse.

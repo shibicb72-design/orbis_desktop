@@ -15,13 +15,16 @@ Orbis is built from one exact Firefox release. `upstream/firefox.json` names it:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-firefox-currency.ps1
 ```
 
-It reads `LATEST_FIREFOX_VERSION` from https://product-details.mozilla.org/1.0/firefox_versions.json.
+It reads `LATEST_FIREFOX_VERSION` from https://product-details.mozilla.org/1.0/firefox_versions.json. When
+the pinned version equals it, the script also runs `git ls-remote` on `FIREFOX_<version>_RELEASE` and checks that
+the tag points at the pinned commit.
 
 | Exit code | Meaning |
 |---|---|
 | 0 | The pin equals or is ahead of Mozilla's latest release |
 | 1 | `BEHIND`: Mozilla has a newer release. Update the pin |
-| 2 | The check failed (network, feed format, pin file). Treat as a failure too |
+| 1 | `STALE`: the pin is Mozilla's latest version but is still the `_BUILD` tag, or the `_RELEASE` tag is a different commit. Switch the pin to the `_RELEASE` tag and its commit |
+| 2 | The check failed (network, git, feed format, pin file). Treat as a failure too |
 
 ## Move the pin to a new release
 
