@@ -34,13 +34,42 @@ English only. The rows below follow Fable's recommended defaults and wait for Sh
 | Captive-portal and connectivity checks | Off, user can turn them on. Hotel, airport and café Wi-Fi login pages will **not open by themselves**; the user opens any page to reach them, or turns the check back on |
 | `about:config` | Open (no policy blocks it) |
 
-Three more defaults also wait for Shibi's decision; they are described in "Network calls that remain" below:
+### Decided by Shibi (2026-11-12)
 
-| Choice | Orbis default now |
-|---|---|
-| uBlock Origin filter lists | Overwritten with Orbis's list set at every launch (`3rdparty` `toOverwrite`) |
-| Push websocket (`push.services.mozilla.com`) | On (Firefox default) |
-| AMO metadata cache (`extensions.getAddons.cache.enabled`) | On (Firefox default) |
+| Choice | Decision | State in this branch |
+|---|---|---|
+| uBlock Origin filter lists | Orbis's list set at first run only; the user can change it | **Not met yet.** `3rdparty` `toOverwrite.filterLists` is still re-applied at every launch, so a user's list changes last only until the next start. uBlock Origin's admin settings have no first-run-only switch for lists; the options are below |
+| Push websocket (`push.services.mozilla.com`) | Stays on | On (Firefox default) and disclosed in "Network calls that remain" and the privacy policy |
+| AMO metadata cache (`extensions.getAddons.cache.enabled`) | Off | false, locked (`orbis.cfg`) |
+
+Why uBlock Origin cannot do "first run only" from policy (read from uBlock Origin's current `src/js/start.js`,
+`storage.js` and `assets.js`):
+
+- `restoreAdminSettings()` runs at every start. Both list settings it reads, `toOverwrite.filterLists` and
+  `adminSettings.selectedFilterLists`, are written to storage every time; neither checks for a first run.
+- The only first-run path is `loadSelectedFilterLists()`: when storage has no list selection, uBlock Origin selects
+  every list in its `assets.json` that is not marked `off`, plus regional lists for the browser language. After
+  that it never touches the selection again, except for changes to its own default set.
+- `adminSettings.assetsBootstrapLocation` can point that first run at a different `assets.json`, but it must be an
+  `http(s)` URL (a `data:` URL or a file inside the browser does not work). And when uBlock Origin later updates
+  `assets.json` from its own server, it removes from the selection every list that was a default in the old
+  file and is not one in the new file. The three Orbis extras would be switched off again at that update.
+
+Options:
+
+- **A. Orbis hosts its own `assets.json`.** A copy of uBlock Origin's file with the three extras switched on and its
+  own update URL pointing back at the Orbis copy, set by `adminSettings.assetsBootstrapLocation`. Meets the
+  decision exactly, and regional lists are selected as usual. Costs: an Orbis-run file that every install fetches
+  about every 13 days (conflicts with "no servers"); Orbis must copy uBlock Origin's changes into it, or users miss
+  new lists and moved list URLs; and whoever can change that file can change the lists, including which ones uBlock
+  Origin trusts, in every Orbis browser without a release.
+- **B. Drop `3rdparty`.** uBlock Origin chooses its own default lists at first run (plus regional lists), and the
+  user's changes are kept. Costs: "Phishing URL Blocklist" and the two cookie-notice lists are not on unless the
+  user turns them on. This conflicts with the decision to ship the Phishing URL Blocklist on, which stands in for
+  Google Safe Browsing.
+- **C. Keep `toOverwrite`** (current). Orbis's lists are always on; the user cannot keep a list change.
+
+Shibi to choose. Until then the branch keeps C, so the phishing list stays on.
 
 ## Differences from Orbis for Android
 
@@ -89,7 +118,7 @@ telemetry, no accounts, no AI chat.
 | `DNSOverHTTPS` | `Enabled` false | Default | No third-party DNS resolver by default. Sets `network.trr.mode` to 5 ("off by choice"), which also stops Mozilla's regional DoH rollout. The user can turn DoH on |
 | `SearchEngines` | `Default` DuckDuckGo; `Add` Brave Search and Startpage | Default | Same default and engines as Android. The added engines have no icon URL (so no request to fetch one) and no suggestion URL (so no search suggestions from them) |
 | `ExtensionSettings` | `*`: allowed types extension, theme, dictionary, sitepermission. `uBlock0@raymondhill.net`: `normal_installed` from addons.mozilla.org, `private_browsing` true | Language packs blocked; uBlock Origin cannot be removed but can be disabled | English only (no `locale` type). uBlock Origin installs automatically on first run and works in private windows; the user can switch it off on a broken site. It is downloaded from AMO, not bundled (GPL-3.0) |
-| `3rdparty` | uBlock Origin `toOverwrite.filterLists`: `user-filters`, `ublock-filters`, `ublock-badware`, `ublock-privacy`, `ublock-unbreak`, `ublock-quick-fixes`, `easylist`, `easyprivacy`, `urlhaus-1`, `plowe-0`, `curben-phishing`, `fanboy-cookiemonster`, `ublock-cookies-easylist` | Re-applied at every start (pending Shibi) | uBlock Origin's own defaults plus "Phishing URL Blocklist" (`curben-phishing`), which stands in for Google Safe Browsing's phishing protection. Malware: `urlhaus-1` and `ublock-badware`. Cookie notices (plan C.2): uBlock Origin's "EasyList/uBO – Cookie Notices" pair, `fanboy-cookiemonster` and `ublock-cookies-easylist`, both off by default in uBlock Origin; the AdGuard pair is not added, to avoid double filtering. These lists hide or block notices; they do not click "accept" or "reject". uBlock Origin applies `toOverwrite` at every launch, so a user's list changes last only until the next start |
+| `3rdparty` | uBlock Origin `toOverwrite.filterLists`: `user-filters`, `ublock-filters`, `ublock-badware`, `ublock-privacy`, `ublock-unbreak`, `ublock-quick-fixes`, `easylist`, `easyprivacy`, `urlhaus-1`, `plowe-0`, `curben-phishing`, `fanboy-cookiemonster`, `ublock-cookies-easylist` | Re-applied at every start (Shibi decided "first run only"; not met yet, see "Decided by Shibi") | uBlock Origin's own defaults plus "Phishing URL Blocklist" (`curben-phishing`), which stands in for Google Safe Browsing's phishing protection. Malware: `urlhaus-1` and `ublock-badware`. Cookie notices (plan C.2): uBlock Origin's "EasyList/uBO – Cookie Notices" pair, `fanboy-cookiemonster` and `ublock-cookies-easylist`, both off by default in uBlock Origin; the AdGuard pair is not added, to avoid double filtering. These lists hide or block notices; they do not click "accept" or "reject". uBlock Origin applies `toOverwrite` at every launch, so a user's list changes last only until the next start |
 
 ## Prefs (`orbis.cfg`)
 
@@ -165,6 +194,7 @@ Mozilla's GMP manifest.
 | `browser.topsites.contile.enabled` | false | Locked | Contile serves sponsored top sites from Mozilla's server; `FirefoxHome` already hides them, this stops the fetch too | firefox.js |
 | `extensions.getAddons.showPane` | false | Locked | No "Recommendations" pane in `about:addons` (content from addons.mozilla.org) | code: toolkit/mozapps/extensions/content/aboutaddons-utils.mjs |
 | `extensions.htmlaboutaddons.recommendations.enabled` | false | Locked | No recommended add-ons in the `about:addons` lists | all.js |
+| `extensions.getAddons.cache.enabled` | false | Locked | Shibi, 2026-11-12. No daily request that sends the IDs of installed add-ons to `services.addons.mozilla.org`; the existing cache is cleared. Add-on updates still work: they ask `versioncheck-bg.addons.mozilla.org`, not this cache, and the add-on blocklist comes from Remote Settings. Effect in `about:addons`: no AMO rating, review count, AMO description, screenshots, AMO icons or AMO listing link; add-ons show the name, description and icon from their own manifest | firefox.js |
 
 ### Mozilla promotions: locked off
 
@@ -216,16 +246,15 @@ here was captured on the wire yet; the network audit (PR 8) confirms it. Every r
 
 Already off (above): telemetry, Normandy, Nimbus, DAP, crash reports; region lookup; captive-portal and connectivity
 checks; Mozilla's DoH rollout; sponsored content and Contile; Google Safe Browsing and Widevine via Google; system
-add-on updates; MITM priming; add-on recommendations.
+add-on updates; MITM priming; add-on recommendations; the AMO metadata cache.
 
 | Call | Host | When | Why it stays |
 |---|---|---|---|
 | Remote Settings | `firefox.settings.services.mozilla.com` (attachments from Mozilla's CDN) | At start and on push notifications | Security data: certificate revocation (CRLite), the add-on blocklist, tracking-protection lists, and more. Turning it off weakens security. Keep and disclose |
-| Push websocket | `wss://push.services.mozilla.com` (`dom.push.serverURL`) | Opened at every start and kept open | Remote Settings uses it to learn of new data at once (broadcast), and websites use it for Web Push notifications. It carries a per-profile ID. **Pending Shibi**: keep (default) or turn off, which delays Remote Settings to its periodic poll and breaks site notifications |
+| Push websocket | `wss://push.services.mozilla.com` (`dom.push.serverURL`) | Opened at every start and kept open | Remote Settings uses it to learn of new data at once (broadcast), and websites use it for Web Push notifications. The connection carries a per-profile ID (UAID) that lets Mozilla's push server recognise the same profile across starts, and Mozilla sees the IP address. **On by Shibi's decision (2026-11-12)**: turning it off (`dom.push.enabled`) would delay security data to Remote Settings' periodic poll and break site notifications. Disclose in the privacy policy |
 | GMP manifest and OpenH264 | `aus5.mozilla.org` (manifest); `ciscobinary.openh264.org` (OpenH264 download) | Manifest about once a day; OpenH264 once and on its updates | OpenH264 is the video codec WebRTC calls need. The manifest also lists Widevine, which is downloaded only if the user turns DRM on. Keep and disclose |
 | Add-on updates and the uBlock Origin install | `addons.mozilla.org`, `versioncheck-bg.addons.mozilla.org` | uBlock Origin download on first start; update checks about once a day | uBlock Origin is installed from AMO, not bundled (GPL-3.0), and must stay current. Unavoidable while add-ons are installed from AMO |
 | uBlock Origin filter lists | `ublockorigin.github.io`, `ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `easylist`/`fanboy` hosts, `malware-filter.gitlab.io`, `curbengh.github.io`, `phishing-filter.pages.dev`, `pgl.yoyo.org` | uBlock Origin's own update schedule (several days per list) | The lists are the malware, phishing, tracker and cookie-notice protection. Requests from uBlock Origin, not from Firefox |
-| AMO metadata cache | `services.addons.mozilla.org` (`extensions.getAddons.get.url`) | About once a day | Fetches names, icons and descriptions for installed add-ons; sends their IDs. Optional. **Pending Shibi**: keep (default) or set `extensions.getAddons.cache.enabled` false |
 | OCSP | The certificate authority's OCSP responder | When a site's certificate needs a revocation check that CRLite (`security.pki.crlite_mode` 2, data from Remote Settings) cannot answer on the device | Certificate revocation checking (`security.OCSP.enabled` 1). It tells the CA which site's certificate is checked. Keep |
 | Search suggestions | `duckduckgo.com` | While the user types in the address bar (not in private windows) | Firefox default, same as Android. The user can turn suggestions off. Disclose |
 | Translation models | Remote Settings attachments (Mozilla's CDN) | Only when the user translates a page into a new language pair | Translation runs on the device; the model is downloaded once. Disclose |
