@@ -2,18 +2,17 @@
 
 Windows browser: Mozilla Firefox source at a pinned release tag, plus an Orbis overlay (branding, locked privacy
 settings, scripts). Distributed only through the Microsoft Store as an MSIX. Sibling of Orbis for Android
-(`%USERPROFILE%\work-orbis`, a separate repository: read-only from here).
+(a separate repository: read-only from here).
 
 ## Ground rules
 
 - One branch per ticket; PR body starts "Do not merge without Shibi's OK." Never merge without Shibi's OK, never
   force-push, never commit secrets.
-- Until a GitHub repository exists, work locally: each PR is a branch off the previous one with one squashable
-  commit, and its description is saved as `docs/pr/<n>.md` on that branch. Do not create a GitHub repository and do
-  not push.
-- **Files on `C:` only. Nothing on `S:`.** The repository is `%USERPROFILE%\orbis_desktop`; the Firefox checkout
-  and build output live outside it, by default under `%USERPROFILE%\orbis_desktop_src\`. Scripts must refuse any
-  other drive.
+- Workflow: one branch per PR. Push the branch and open the PR with `gh pr create`. The PR body starts "Do not
+  merge without Shibi's OK." and is the only place the PR description lives. Agents never merge and never
+  force-push.
+- **Files on `C:` only** (owner's rule). The Firefox checkout and build output live outside the repository, by
+  default under `%USERPROFILE%\orbis_desktop_src\`. Scripts must refuse any other drive.
 - Delete nothing you did not create.
 - No spending. No accepting licence terms. No installing software: list what is needed and its licence, and wait
   for Shibi's approval.
@@ -33,9 +32,15 @@ Items marked "planned" do not exist yet.
 - `upstream/firefox.json`: the pinned Firefox tag **and** commit hash. The only place the version lives.
 - `scripts/fetch-firefox.ps1`: shallow fetch of the pinned tag into `%USERPROFILE%\orbis_desktop_src\firefox` (or a
   given path); stops on a hash mismatch.
-- `scripts/check-firefox-currency.ps1`: exits non-zero when Mozilla's latest release is newer than the pin.
+- `scripts/check-firefox-currency.ps1`: exits non-zero when Mozilla's latest release is newer than the pin, or when
+  the pin is that release but still a `_BUILD` tag or not the commit of its `_RELEASE` tag.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
-- (planned) `scripts/apply-overlay.ps1`: copies `overlay/` into the checkout and applies `patches/`.
+- (planned) `scripts/apply-overlay.ps1`: copies `overlay/` into the checkout.
+- `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
+  `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`) and the
+  executables' version resource (company Orbis, no Firefox trademark line).
+- `scripts/apply-patches.ps1`: applies `patches/*.patch` to the pinned checkout after `git apply --check`; refuses
+  a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing.
 - `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search engines).
 - `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy covers.
   `orbis.cfg` runs in AutoConfig's sandbox: pref functions only, and its first line is skipped by Firefox.
@@ -65,6 +70,7 @@ Available now:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-firefox-currency.ps1   # is the pin current?
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-firefox.ps1            # pinned source (large)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-patches.ps1 -Check     # do the patches apply?
 python -I scripts/check-settings.py                                                       # prefs and policies vs the source
 ```
 

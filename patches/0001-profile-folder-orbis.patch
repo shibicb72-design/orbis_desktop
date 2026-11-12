@@ -1,0 +1,21 @@
+Orbis: keep Orbis's profiles apart from Firefox's.
+
+MOZ_APP_PROFILE is a project_flag: it can only be implied from moz.configure, not set in a mozconfig.
+With it, application.ini gets Profile=Orbis and Windows profiles live in %APPDATA%\Orbis and
+%LOCALAPPDATA%\Orbis instead of %APPDATA%\Mozilla\Firefox. Vendor and basename stay as they are
+(MOZ_APP_BASENAME Firefox keeps the Firefox/<version> user-agent token and the search config).
+See docs/PATCHES.md.
+
+diff --git a/browser/moz.configure b/browser/moz.configure
+index 8979a2e..03dc878 100644
+--- a/browser/moz.configure
++++ b/browser/moz.configure
+@@ -12,6 +12,8 @@ imply_option("MOZ_PROFILE_MIGRATOR", True)
+ 
+ 
+ imply_option("MOZ_APP_VENDOR", "Mozilla")
++# Orbis: own profile folder (%APPDATA%\Orbis, %LOCALAPPDATA%\Orbis) instead of Mozilla\Firefox.
++imply_option("MOZ_APP_PROFILE", "Orbis")
+ imply_option("MOZ_APP_ID", "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}")
+ # Include the DevTools client, not just the server (which is the default)
+ imply_option("MOZ_DEVTOOLS", "all")

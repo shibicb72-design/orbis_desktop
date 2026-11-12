@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/mozilla-firefox/firefox",
+  "tag": "FIREFOX_160_0_RELEASE",
+  "commit": "2887d9de1f69c0e9776413da80e7ba0d1225dd9b",
+  "verified": {
+    "date": "2026-11-11",
+    "command": "git ls-remote https://github.com/mozilla-firefox/firefox refs/tags/FIREFOX_160_0_RELEASE",
+    "result": "2887d9de1f69c0e9776413da80e7ba0d1225dd9b refs/tags/FIREFOX_160_0_RELEASE (lightweight tag, points directly at the commit)",
+    "note": "FIREFOX_160_0_BUILD1 is the same commit. GitHub API confirms it is a commit dated 2026-11-04T17:51:23Z."
+  }
+}
