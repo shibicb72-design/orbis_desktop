@@ -61,7 +61,10 @@ Items marked "planned" do not exist yet.
   Origin, idle DNS lookups, About dialog). Needs a build and the Firefox checkout's Marionette client.
 - `scripts/make-msix.ps1` + `packaging/msix-config.json`: unsigned MSIX from the packaged build with
   `mach repackage msix` (zip plus `orbis-dist`), then `makeappx unpack` checks of the manifest, assets and policy
-  files. Store identity values are `TODO-STORE` placeholders. Never signs or installs. See `docs/MSIX.md`.
+  files. Store identity values are `TODO-STORE` placeholders (loud warning; `-RequireStoreIdentity` refuses
+  them). Never signs or installs. See `docs/MSIX.md`.
+- `docs/STORE-SUBMISSION.md`: Partner Center text (`runFullTrust` justification, certification notes), Store
+  blockers, policy 10.2.1 engine currency, and policy risks.
 - `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
   Android.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.

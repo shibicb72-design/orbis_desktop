@@ -96,6 +96,14 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   Foundation" as the company of a binary Orbis built is not true, and it breaks the "no Mozilla names" rule in
   spirit. Fix: a small patch to `create_rc.py`'s two defaults (`Orbis`, empty), checked like 0002. Not done in
   this PR because it changes every binary's resource and needs the next build to check.
+  **Count in the packaged build (2026-11-12): 21 binaries** in the MSIX still say `CompanyName` "Mozilla
+  Foundation" and `LegalTrademarks` "Mozilla" (`xul.dll`, `mozglue.dll`, `nss3.dll`, `freebl3.dll`,
+  `softokn3.dll`, `lgpllibs.dll`, `gkcodecs.dll`, `mozavcodec.dll`, `mozavutil.dll`, `mozinference.dll`,
+  `AccessibleMarshal.dll`, `msixcomserver.dll`, `notificationserver.dll`, `wmfclearkey.dll`,
+  `gmp-clearkey\0.1\clearkey.dll`, both `InstallationDirLayout.dll`, `nmhproxy.exe`, `notification-helper.exe`,
+  `pingsender.exe`, `desktop-launcher\desktop-launcher.exe`). `scripts/make-msix.ps1` lists them on every run
+  (a report, not a failure). `orbis.exe` and `private_browsing.exe` also show up in that report, only for
+  `LegalCopyright`, which stays on purpose (`docs/PATCHES.md`, patch 0002).
 - **Not a Store blocker: langpack ID `langpack-en-US@firefox.mozilla.org`.** `mach package` also writes a separate
   en-US language pack, `dist/win64/xpi/orbis-160.0.en-US.langpack.xpi`, with the ID `langpack-en-US@` +
   `MOZ_LANGPACK_EID_HOST`, which `toolkit/moz.configure` fixes to `firefox.mozilla.org` (no build option). Why not
@@ -114,9 +122,12 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   for the package identity name, publisher and publisher display name (`docs/MSIX.md`). The manifest's
   background-task class ID is `Mozilla.MsixComServer.BackgroundTaskHost` from the build: an internal identifier
   (rule 5), not shown to users.
-- **Still shared with Firefox, by design:** the enterprise-policy registry key
-  `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (and its HKCU twin): Firefox group policies set by an administrator also
-  apply to Orbis. Other shared registry keys are listed in `docs/PATCHES.md`, "Still shared with Firefox".
+- **Orbis reads Firefox's group policies: `Software\Policies\Mozilla\Firefox`.** The enterprise-policy registry
+  key `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (and its HKCU twin) is fixed in the source, so Firefox group
+  policies that an administrator (or any program running as administrator, or as the user for HKCU) sets also
+  apply to Orbis, on top of `distribution\policies.json`. Shared by design for now; to settle before 1.0 whether
+  Orbis needs its own key (a patch) or should document this. Other shared registry keys are listed in
+  `docs/PATCHES.md`, "Still shared with Firefox".
 - **About dialog text: fixed by `patches/0003-about-dialog-orbis.patch`, to check in the next build.** The first
   build's dialog said "Orbis is designed by Orbis, a global community working together to keep the Web open,
   public and accessible to all." (`community-2`, with `-vendor-short-name` "Orbis") and "Want to help? Make a
@@ -147,7 +158,17 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   it still says something true.
 - **`firefox.VisualElementsManifest.xml`.** Windows reads `<exe name>.VisualElementsManifest.xml`; with `orbis.exe`
   the file may need renaming for the classic Start menu tile. MSIX uses its own tile images, so this may not
-  matter. Unverified.
+  matter. Unverified. It is in the MSIX under that name (`make-msix.ps1` reports it), a file name with "firefox"
+  that a user can see in the install folder.
+- **Firefox mascot art from outside the branding folder: `confused_fox.pdf` and `kit.gif`.** Both are Firefox
+  mascot art from `browser/components/shell/`, not the branding folder, so the placeholder branding does not
+  replace them, and both are in the MSIX (`browser\confused_fox.pdf`, `browser\components\shell\assets\kit.gif`).
+  `confused_fox.pdf` is the bundled PDF that `ShellService.sys.mjs` hands to Windows' "Open with" dialog when
+  Orbis asks to become the default PDF viewer; `kit.gif` is the animation `WindowsUIOverlayImage.cpp` draws over
+  Windows' own dialogs in the set-as-default flow. Replace them with Orbis art (same names, a patch or overlay
+  to decide) or patch the flows out (PR 9).
+- **Tile background `#20123A` is Firefox purple.** The MSIX manifest's tile `BackgroundColor` comes from Firefox's
+  template unchanged (`docs/MSIX.md`, open items). Choose an Orbis colour with the real artwork (PR 9).
 - **Icons with PNG-compressed entries.** The generated `.ico` files store PNG images (valid since Windows Vista).
   That the build's resource compiler accepts them is unverified until the first build.
 - **The name "Orbis"** in the Microsoft Store and as a trademark: not checked.
