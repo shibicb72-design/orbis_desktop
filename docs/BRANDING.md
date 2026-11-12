@@ -40,7 +40,7 @@ Rules for Orbis (also in `AGENTS.md`):
 | `configure.sh` | `MOZ_APP_DISPLAYNAME` | `Orbis` |
 | `locales/en-US/brand.ftl` | `-brand-short-name`, `-brand-full-name`, `-brand-product-name`, `-vendor-short-name`, ... | `Orbis` |
 | `locales/en-US/brand.properties` | `brandShortName`, `brandFullName`, ... | `Orbis` |
-| `branding.nsi` | `BrandFullName`, `CompanyName`, URLs | `Orbis`, the Orbis repository (no NSIS installer is shipped) |
+| `branding.nsi` | `BrandFullName`, `CompanyName`, URLs, `CertNameDownload` | `Orbis`, the Orbis repository, blank (no NSIS installer is shipped) |
 | `pref/firefox-branding.js` | start and welcome pages | empty; the template's updater prefs and `devtools.selfxss.count` are dropped |
 
 `scripts/apply-overlay.ps1` copies `overlay/browser/branding/orbis/` to `browser/branding/orbis/` in the Firefox
@@ -61,12 +61,40 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
 
 ## Open items
 
-- **Profile folder (needs a patch, PR 5).** `browser/moz.configure` hard-codes
-  `imply_option("MOZ_APP_VENDOR", "Mozilla")`, and `MOZ_APP_VENDOR`, `MOZ_APP_PROFILE` and `MOZ_APP_UA_NAME` can
-  only be set from inside the source (`project_flag`, "implied" origin only), not from a mozconfig. With vendor
-  "Mozilla" and basename "Firefox", Orbis would keep its profiles in `%APPDATA%\Mozilla\Firefox`, the same place as
-  an installed Firefox. A one-line patch in `patches/` (setting `MOZ_APP_PROFILE` or the vendor) is the likely fix;
-  whether MSIX file virtualisation already separates them is unverified.
+- **BUILD BLOCKER: profile collision. Nothing built from this branch may be packaged, installed or run on this PC
+  until it is fixed.** `browser/moz.configure` hard-codes `imply_option("MOZ_APP_VENDOR", "Mozilla")`, and
+  `MOZ_APP_VENDOR`, `MOZ_APP_PROFILE` and `MOZ_APP_UA_NAME` can only be set from inside the source
+  (`project_flag`, "implied" origin only), not from a mozconfig. With vendor "Mozilla" and basename "Firefox",
+  Orbis keeps its profiles in `%APPDATA%\Mozilla\Firefox` and `%LOCALAPPDATA%\Mozilla\Firefox`, the same place as
+  an installed Firefox: one `profiles.ini` and one `installs.ini` for both, and either program can open, upgrade
+  or lock the other's profiles (`MOZ_BLOCK_PROFILE_DOWNGRADE` is on). MSIX does not separate them: Firefox's
+  dedicated-profile logic (`GetInstallHash`, `MaybeMakeDefaultDedicatedProfile`) writes to the same files when
+  packaged. A trial build that only compiles is fine; starting it is not.
+  Fix: PR 5 (`pr5-source-patches`), `patches/0001-profile-folder-orbis.patch`, adds
+  `imply_option("MOZ_APP_PROFILE", "Orbis")` (profiles in `%APPDATA%\Orbis` and `%LOCALAPPDATA%\Orbis`). The
+  blocker is lifted only when that patch is applied to the build and its test passes: with Firefox installed,
+  `%APPDATA%\Mozilla\Firefox\profiles.ini` and `installs.ini` stay byte-identical after Orbis runs (test plan in
+  PR 5's `docs/PATCHES.md`). Do not use `--with-app-basename=Orbis` instead: it changes the user agent to
+  `Orbis/160.0` and the search configuration (rule 4 above).
+- **STORE BLOCKER: executable version resource.** `browser/app/module.ver` (and `browser/app/pbproxy/module.ver`
+  for `private_browsing.exe`) hard-codes `WIN32_MODULE_COMPANYNAME=Mozilla Corporation` and
+  `WIN32_MODULE_TRADEMARKS=Firefox is a Trademark of The Mozilla Foundation.`, which `config/create_rc.py` writes
+  into `orbis.exe`'s File Properties > Details. `ipc/app/module.ver` (`plugin-container.exe`) also says Mozilla
+  Corporation. No build option changes them. Fix: PR 5, `patches/0002-version-resource-orbis.patch` (company Orbis,
+  empty trademark line). Still open after that patch: DLLs and EXEs without a `module.ver` get `create_rc.py`'s
+  defaults ("Mozilla Foundation", "Mozilla"), and `create_rc.py` writes Mozilla's `LimitedAccessFeature`
+  identity. Must be settled before any Store submission.
+- **Still shared with Firefox, by design:** the enterprise-policy registry key
+  `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (and its HKCU twin). Firefox group policies set by an administrator also
+  apply to Orbis. Documented in PR 5's `docs/PATCHES.md`.
+- **About dialog text (PR 9).** `browser/locales/en-US/browser/aboutDialog.ftl` string `community-2`:
+  "{ -brand-short-name } is designed by { -vendor-short-name }, a global community working together to keep the Web
+  open, public and accessible to all." With `-vendor-short-name` "Orbis" this reads "Orbis is designed by Orbis, a
+  global community ...", which is not true. In `browser/base/content/aboutDialog.xhtml` the vendor name links to
+  `https://www.mozilla.org/` (`community-mozillaLink`), "global community" to `about:credits` (Mozilla's
+  contributors), and the `helpus` string's "Make a donation" and "get involved!" to `foundation.mozilla.org` and
+  `mozilla.org/contribute`. Same for `community-exp` and `helpus-referrals2`. PR 9 replaces these strings and
+  links.
 - **Real artwork and Store tiles (PR 9).** Replace every placeholder; keep the same file names and sizes.
 - **Strings outside the branding folder (PR 9).** Some Firefox pages name Mozilla or Firefox directly, for example
   `browser/base/content/overrides/app-license.html` ("made available to you by the Mozilla Project"). Audit them

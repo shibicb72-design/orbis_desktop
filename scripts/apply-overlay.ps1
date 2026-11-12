@@ -21,13 +21,20 @@ that is not in this branch is reported and skipped.
 Safety rules. The script refuses, and copies nothing, when:
 - the checkout is not on drive C:, is inside this repository, or does not look like a Firefox checkout
   (no mach, no browser\branding\unofficial);
+- the checkout folder, or any folder above it up to C:\, is a junction or symbolic link;
 - upstream\firefox.json exists and the checkout's HEAD is not the pinned commit;
 - any destination resolves outside the checkout, or passes through a junction or symbolic link;
 - any destination is a file Firefox itself tracks in git (the Firefox source is never edited by hand);
 - browser\branding\orbis or orbis-dist exists but was not created by this script (no .orbis-overlay marker).
 
 Running it again gives the same result: the two folders it owns are emptied and refilled, so files removed
-from the overlay disappear from the checkout too. Nothing else in the checkout is deleted.
+from the overlay disappear from the checkout too. Each folder gets its marker before any file is copied, so a
+run that fails halfway can simply be repeated. Nothing else in the checkout is deleted.
+
+An existing mozconfig in the checkout that differs from the Orbis one (it is untracked, so git cannot restore
+it) is reported with a warning and kept as mozconfig.orbis-previous before it is overwritten.
+
+Firefox source patches (patches\) are applied separately by scripts\apply-patches.ps1 (PR 5), before this script.
 
 Exit code 0: copied (or, with -DryRun, would copy). Exit code 1: refused or failed.
 
@@ -62,18 +69,28 @@ function Test-PathInside {
 
 function Assert-NoReparsePoint {
     # Every existing folder from $Root down to $Path must be a plain folder (no junction or symlink).
+    # With -Root '' the check goes all the way up to the drive root.
     param([string]$Path, [string]$Root)
     $cur = $Path
-    while ($cur.Length -ge $Root.Length) {
+    while ($cur -and $cur.Length -ge $Root.Length) {
         if (Test-Path -LiteralPath $cur) {
             $item = Get-Item -LiteralPath $cur -Force
             if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
                 throw "REFUSED: '$cur' is a junction or symbolic link"
             }
         }
-        if ($cur.Length -eq $Root.Length) { break }
-        $cur = Split-Path -Parent $cur
+        if ($Root -and $cur.Length -eq $Root.Length) { break }
+        $parent = Split-Path -Parent $cur
+        if (-not $parent -or $parent -eq $cur) { break }
+        $cur = $parent
     }
+}
+
+function Get-FileSha256 {
+    param([string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $fs = [System.IO.File]::OpenRead($Path)
+    try { return ([BitConverter]::ToString($sha.ComputeHash($fs)) -replace '-', '') } finally { $fs.Dispose() }
 }
 
 try {
@@ -90,7 +107,8 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $co 'browser\branding\unofficial') -PathType Container)) {
         throw "REFUSED: '$co' does not look like a Firefox checkout (no mach or browser\branding\unofficial)"
     }
-    Assert-NoReparsePoint -Path $co -Root $co
+    # The checkout folder and every folder above it, up to C:\, must be plain folders.
+    Assert-NoReparsePoint -Path $co -Root ''
     $isGit = Test-Path -LiteralPath (Join-Path $co '.git')
 
     $pinFile = Join-Path $repoRoot 'upstream\firefox.json'
@@ -138,7 +156,7 @@ try {
         $c[1] = $dest
     }
     if ($isGit) {
-        $tracked = @(& git -C $co ls-files -- 'mozconfig' 'browser/branding/orbis' 'orbis-dist')
+        $tracked = @(& git -C $co ls-files -- 'mozconfig' 'mozconfig.orbis-previous' 'browser/branding/orbis' 'orbis-dist')
         if ($LASTEXITCODE -ne 0) { throw "git ls-files failed in '$co'" }
         if ($tracked.Count -gt 0) {
             throw ("REFUSED: these destinations are Firefox files tracked in git: " + ($tracked -join ', '))
@@ -151,6 +169,15 @@ try {
         }
     }
 
+    # An existing mozconfig that is not ours (untracked, so Firefox's git cannot restore it) is kept as a copy.
+    $mozDest = Join-Path $co 'mozconfig'
+    $mozBackup = Join-Path $co 'mozconfig.orbis-previous'
+    $mozDiffers = (Test-Path -LiteralPath $mozDest -PathType Leaf) -and
+                  ((Get-FileSha256 $mozDest) -ne (Get-FileSha256 $mozconfig))
+    if ($mozDiffers) {
+        Write-Warning ("'{0}' exists and differs from the Orbis mozconfig. It will be overwritten; the old file is kept as '{1}'." -f $mozDest, $mozBackup)
+    }
+
     # --- Copy --------------------------------------------------------------------------------------
     foreach ($c in $copies) {
         Write-Host ("  {0} -> {1}" -f $c[0].Substring($repoRoot.Length + 1), $c[1].Substring($co.Length + 1))
@@ -159,20 +186,25 @@ try {
         Write-Host ("OK (dry run): {0} files would be copied into {1}" -f $copies.Count, $co)
         exit 0
     }
+    if ($mozDiffers) { Copy-Item -LiteralPath $mozDest -Destination $mozBackup -Force }
     foreach ($o in $owned) {
         $dir = Join-Path $co $o
         if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+    }
+    # Each owned folder gets its marker before any file, so a run that fails halfway leaves folders that the
+    # next run recognises as its own and refills.
+    foreach ($o in $owned) {
+        $dir = Join-Path $co $o
+        $used = @($copies | Where-Object { Test-PathInside $_[1] $dir })
+        if ($used.Count -gt 0) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $dir $Marker) -Encoding ASCII -Value 'Created by orbis_desktop scripts\apply-overlay.ps1. The script empties and refills this folder.'
+        }
     }
     foreach ($c in $copies) {
         $parent = Split-Path -Parent $c[1]
         if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
         Copy-Item -LiteralPath $c[0] -Destination $c[1] -Force
-    }
-    foreach ($o in $owned) {
-        $dir = Join-Path $co $o
-        if (Test-Path -LiteralPath $dir) {
-            Set-Content -LiteralPath (Join-Path $dir $Marker) -Encoding ASCII -Value 'Created by orbis_desktop scripts\apply-overlay.ps1. The script empties and refills this folder.'
-        }
     }
     Write-Host ("OK: copied {0} files into {1}" -f $copies.Count, $co)
     exit 0

@@ -23,9 +23,10 @@
 !define URLSystemRequirements "https://github.com/shibicb72-design/orbis_desktop"
 !define Channel "unofficial"
 
-# The installer's certificate name and issuer expected by the stub installer.
-# Orbis has no stub installer; the values are kept from the template.
-!define CertNameDownload   "Mozilla Corporation"
+# The installer's certificate name and issuer expected by the stub installer (stub.nsh, CertCheck).
+# Orbis has no stub installer (the stub is only built for 32-bit). The name is blank so no Orbis file names
+# Mozilla Corporation as its signer; the issuer is kept from the template.
+!define CertNameDownload   ""
 !define CertIssuerDownload "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1"
 
 # Dialog units are used so the UI displays correctly with the system's DPI

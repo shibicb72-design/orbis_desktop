@@ -29,7 +29,9 @@ ac_add_options --disable-maintenance-service
 ac_add_options --disable-crashreporter
 ac_add_options --disable-default-browser-agent
 
-# Telemetry reporting compiled out (an empty value disables it; it defaults to on only for official Mozilla builds).
+# Telemetry reporting off at build level: an empty value leaves the MOZ_TELEMETRY_REPORTING define unset (it is on
+# by default only for official Mozilla builds). The telemetry code is still built; it is not marked as official
+# telemetry and orbis.cfg locks its upload switches off.
 export MOZ_TELEMETRY_REPORTING=
 # Add-on signing enforced. On by default for release milestones; set explicitly so it can never silently change.
 export MOZ_REQUIRE_SIGNING=1
