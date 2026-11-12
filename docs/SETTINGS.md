@@ -17,11 +17,16 @@ Words used in the tables:
 `python -I scripts/check-settings.py` fails if a pref or policy here does not exist in the pinned source, if a
 value has the wrong type or is not allowed by the policy schema, or if a setting has no row in this file.
 
-## Defaults pending Shibi's OK
+## Defaults: decided by Shibi, and pending Shibi's OK
 
-Shibi decided (2026-11-12): Microsoft Store only, release channel, no Google Safe Browsing, uBlock Origin installed
-automatically with its "Phishing URL Blocklist" on, no servers, accounts, sync, analytics, telemetry or studies,
-English only. The rows below follow Fable's recommended defaults and wait for Shibi's OK:
+Shibi decided (2026-11-12): Microsoft Store only, release channel, Google Safe Browsing off, uBlock Origin installed
+automatically with Orbis's filter lists enforced at every launch (including "Phishing URL Blocklist"), push
+websocket kept, AMO metadata cache off, no servers, accounts, sync, analytics, telemetry or studies, English only.
+See "Decided by Shibi" below.
+
+### Pending Shibi's OK
+
+Shibi has not explicitly approved these. They follow Fable's recommended defaults:
 
 | Choice | Orbis default |
 |---|---|
@@ -38,12 +43,14 @@ English only. The rows below follow Fable's recommended defaults and wait for Sh
 
 | Choice | Decision | State in this branch |
 |---|---|---|
-| uBlock Origin filter lists | Orbis's list set at first run only; the user can change it | **Not met yet.** `3rdparty` `toOverwrite.filterLists` is still re-applied at every launch, so a user's list changes last only until the next start. uBlock Origin's admin settings have no first-run-only switch for lists; the options are below |
+| Google Safe Browsing | Off | Off, every Google endpoint blanked (`orbis.cfg`); phishing and malware protection come from uBlock Origin's lists |
+| uBlock Origin | Installed automatically from addons.mozilla.org | `ExtensionSettings` `normal_installed` |
+| uBlock Origin filter lists | Option C: Orbis's list set, **enforced at every launch**. A user's list changes reset at the next start | `3rdparty` `toOverwrite.filterLists`, re-applied by uBlock Origin at every launch. Options A and B were rejected (below) |
 | Push websocket (`push.services.mozilla.com`) | Stays on | On (Firefox default) and disclosed in "Network calls that remain" and the privacy policy |
 | AMO metadata cache (`extensions.getAddons.cache.enabled`) | Off | false, locked (`orbis.cfg`) |
 
-Why uBlock Origin cannot do "first run only" from policy (read from uBlock Origin's current `src/js/start.js`,
-`storage.js` and `assets.js`):
+Why the lists are enforced rather than set once: uBlock Origin cannot do "first run only" from policy (read from
+uBlock Origin's current `src/js/start.js`, `storage.js` and `assets.js`):
 
 - `restoreAdminSettings()` runs at every start. Both list settings it reads, `toOverwrite.filterLists` and
   `adminSettings.selectedFilterLists`, are written to storage every time; neither checks for a first run.
@@ -55,21 +62,23 @@ Why uBlock Origin cannot do "first run only" from policy (read from uBlock Origi
   `assets.json` from its own server, it removes from the selection every list that was a default in the old
   file and is not one in the new file. The three Orbis extras would be switched off again at that update.
 
-Options:
+Chosen (Shibi, 2026-11-12):
 
-- **A. Orbis hosts its own `assets.json`.** A copy of uBlock Origin's file with the three extras switched on and its
-  own update URL pointing back at the Orbis copy, set by `adminSettings.assetsBootstrapLocation`. Meets the
-  decision exactly, and regional lists are selected as usual. Costs: an Orbis-run file that every install fetches
-  about every 13 days (conflicts with "no servers"); Orbis must copy uBlock Origin's changes into it, or users miss
-  new lists and moved list URLs; and whoever can change that file can change the lists, including which ones uBlock
-  Origin trusts, in every Orbis browser without a release.
-- **B. Drop `3rdparty`.** uBlock Origin chooses its own default lists at first run (plus regional lists), and the
-  user's changes are kept. Costs: "Phishing URL Blocklist" and the two cookie-notice lists are not on unless the
-  user turns them on. This conflicts with the decision to ship the Phishing URL Blocklist on, which stands in for
-  Google Safe Browsing.
-- **C. Keep `toOverwrite`** (current). Orbis's lists are always on; the user cannot keep a list change.
+- **C. Keep `toOverwrite`, enforced at every launch.** Orbis's lists are always on, so the Phishing URL Blocklist
+  that stands in for Google Safe Browsing cannot stay off. A user can change the lists for the current session;
+  the change is reset at the next start. Regional lists are not selected automatically.
 
-Shibi to choose. Until then the branch keeps C, so the phishing list stays on.
+Rejected alternatives:
+
+- **A. Orbis hosts its own `assets.json`** (a copy of uBlock Origin's file with the three extras switched on and its
+  own update URL pointing back at the Orbis copy, set by `adminSettings.assetsBootstrapLocation`). Rejected: it
+  needs a server. Every install would fetch an Orbis-run file about every 13 days, which breaks "no servers";
+  Orbis would have to copy uBlock Origin's changes into it; and whoever can change that file can change every
+  user's lists, including which ones uBlock Origin trusts, without a release.
+- **B. Drop `3rdparty`** (uBlock Origin chooses its own default lists at first run, plus regional lists, and the
+  user's changes are kept). Rejected: phishing protection would be off by default. "Phishing URL Blocklist" and
+  the two cookie-notice lists are not among uBlock Origin's defaults, and the phishing list is what replaces Google
+  Safe Browsing.
 
 ## Differences from Orbis for Android
 
@@ -118,7 +127,7 @@ telemetry, no accounts, no AI chat.
 | `DNSOverHTTPS` | `Enabled` false | Default | No third-party DNS resolver by default. Sets `network.trr.mode` to 5 ("off by choice"), which also stops Mozilla's regional DoH rollout. The user can turn DoH on |
 | `SearchEngines` | `Default` DuckDuckGo; `Add` Brave Search and Startpage | Default | Same default and engines as Android. The added engines have no icon URL (so no request to fetch one) and no suggestion URL (so no search suggestions from them) |
 | `ExtensionSettings` | `*`: allowed types extension, theme, dictionary, sitepermission. `uBlock0@raymondhill.net`: `normal_installed` from addons.mozilla.org, `private_browsing` true | Language packs blocked; uBlock Origin cannot be removed but can be disabled | English only (no `locale` type). uBlock Origin installs automatically on first run and works in private windows; the user can switch it off on a broken site. It is downloaded from AMO, not bundled (GPL-3.0) |
-| `3rdparty` | uBlock Origin `toOverwrite.filterLists`: `user-filters`, `ublock-filters`, `ublock-badware`, `ublock-privacy`, `ublock-unbreak`, `ublock-quick-fixes`, `easylist`, `easyprivacy`, `urlhaus-1`, `plowe-0`, `curben-phishing`, `fanboy-cookiemonster`, `ublock-cookies-easylist` | Re-applied at every start (Shibi decided "first run only"; not met yet, see "Decided by Shibi") | uBlock Origin's own defaults plus "Phishing URL Blocklist" (`curben-phishing`), which stands in for Google Safe Browsing's phishing protection. Malware: `urlhaus-1` and `ublock-badware`. Cookie notices (plan C.2): uBlock Origin's "EasyList/uBO – Cookie Notices" pair, `fanboy-cookiemonster` and `ublock-cookies-easylist`, both off by default in uBlock Origin; the AdGuard pair is not added, to avoid double filtering. These lists hide or block notices; they do not click "accept" or "reject". uBlock Origin applies `toOverwrite` at every launch, so a user's list changes last only until the next start |
+| `3rdparty` | uBlock Origin `toOverwrite.filterLists`: `user-filters`, `ublock-filters`, `ublock-badware`, `ublock-privacy`, `ublock-unbreak`, `ublock-quick-fixes`, `easylist`, `easyprivacy`, `urlhaus-1`, `plowe-0`, `curben-phishing`, `fanboy-cookiemonster`, `ublock-cookies-easylist` | Enforced: re-applied at every start, so a user's list changes reset at the next start (Shibi's decision, option C; see "Decided by Shibi") | uBlock Origin's own defaults plus "Phishing URL Blocklist" (`curben-phishing`), which stands in for Google Safe Browsing's phishing protection. Malware: `urlhaus-1` and `ublock-badware`. Cookie notices (plan C.2): uBlock Origin's "EasyList/uBO – Cookie Notices" pair, `fanboy-cookiemonster` and `ublock-cookies-easylist`, both off by default in uBlock Origin; the AdGuard pair is not added, to avoid double filtering. These lists hide or block notices; they do not click "accept" or "reject". uBlock Origin applies `toOverwrite` at every launch, so a user's list changes last only until the next start |
 
 ## Prefs (`orbis.cfg`)
 
