@@ -46,14 +46,16 @@ Items marked "planned" do not exist yet.
   `browser/moz.configure` sets `MOZ_APP_PROFILE` (patch 0001: the profile build blocker). It does not apply
   `patches/`.
 - `scripts/make-placeholder-branding.ps1`: redraws the TODO placeholder images.
-- (planned) `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search
-  engines).
-- (planned) `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy
-  covers.
+- `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search engines).
+- `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy covers.
+  `orbis.cfg` runs in AutoConfig's sandbox: pref functions only, and its first line is skipped by Firefox.
+- `scripts/check-settings.py`: fails on unknown pref names, wrong pref types, invalid policies (checked against the
+  pinned source's `policies-schema.json`) and settings missing from `docs/SETTINGS.md`.
 - `overlay/browser/branding/orbis/`: name "Orbis"; icons and Store tiles are TODO placeholders. See
   `docs/BRANDING.md` for the trademark rules.
 - `mozconfig`: Windows x64 release build options. `scripts/check-mozconfig.py` checks them against the source.
-- (planned) `docs/SETTINGS.md`: one row per setting: what, why, locked or default, Android equivalent.
+- `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
+  Android.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.
 
 ## Design rules
@@ -76,8 +78,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-firefox-curren
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-firefox.ps1            # pinned source (large)
 python -I scripts/check-mozconfig.py                                                      # mozconfig options vs the source
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-patches.ps1 -Check     # do the patches apply?
+python -I scripts/check-settings.py                                                       # prefs and policies vs the source
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-overlay.ps1 -DryRun    # what would be copied
 ```
+
+`check-settings.py` reads the checkout at `%USERPROFILE%\orbis_desktop_src\firefox` (or `--source DIR`). With only
+the four source files it needs (see the script's header) it still runs, but prefs that no pref file defines then
+fail, because it cannot search Firefox's code for them. `--ubo-assets FILE` also checks our uBlock Origin list set
+against uBlock Origin's `assets.json`.
 
 Planned:
 

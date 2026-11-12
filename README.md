@@ -27,13 +27,18 @@ The features below describe the target, not a finished product.
 - HTTPS-only mode on by default.
 - No telemetry, no studies, no crash reports, no accounts, no sync, no sponsored content, no AI chat.
 
-TODO (Safe Browsing decision): one honest sentence about malware and phishing protection.
+Malware and phishing protection: Orbis blocks known malware and phishing sites with open blocklists in uBlock
+Origin. It does not use Google Safe Browsing, so it sends nothing to Google, but it catches new phishing pages
+later than Chrome or Firefox do. Orbis does not change Windows SmartScreen. Every setting and its reason
+is in `docs/SETTINGS.md`.
 
 ## What leaves your PC
 
 A full list will be in `PRIVACY_POLICY.md` (TODO). In short: the sites you visit, your chosen search engine,
-addons.mozilla.org and filter-list publishers (uBlock Origin), Mozilla (security lists and translation models), and
-the Microsoft Store (updates). Nothing goes to Orbis's developer.
+addons.mozilla.org and filter-list publishers (uBlock Origin), Mozilla (security lists, push service, media
+plugins and translation models), Cisco (the OpenH264 video codec), certificate authorities (revocation checks), and
+the Microsoft Store (updates). Nothing goes to Orbis's developer. Each call and its reason is listed in
+`docs/SETTINGS.md`, "Network calls that remain".
 
 ## How this repository works
 
@@ -43,11 +48,11 @@ release. Paths marked "planned" do not exist yet.
 | Path | What |
 |---|---|
 | `upstream/firefox.json` | The Firefox release tag and commit that Orbis is built from |
-| `scripts/` | Fetch the pinned Firefox source, check that it is current; later: apply the overlay, build, package, test |
-| `overlay/` | (planned) Branding, `policies.json`, `orbis.cfg`: files copied into the Firefox source tree |
+| `scripts/` | Fetch the pinned Firefox source, check that it is current, check the settings and mozconfig, apply the patches and the overlay; later: build, package, test |
+| `overlay/` | Files copied into the Firefox build: the policy files (`distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`) and the Orbis branding (`browser/branding/orbis/`, placeholder art) |
 | `patches/` | Changes to Mozilla's own files, kept as few as possible; each one explained in `docs/PATCHES.md` |
 | `mozconfig` | Build options (Windows x64, release; no updater, crash reporter or telemetry reporting) |
-| `docs/` | Update guide; later: settings rationale, build guide, network audit, Store materials |
+| `docs/` | Update guide, settings rationale, patches, branding rules; later: build guide, network audit, Store materials |
 | `tests/` | (planned) Smoke tests and the network allow-list |
 
 Every difference between Orbis and Firefox is in this repository.
