@@ -30,6 +30,14 @@ What fails (exit code 1):
 - a pref or top-level policy with no row (its name in backticks) in docs/SETTINGS.md;
 - with --ubo-assets (uBlock Origin's assets.json): a filter-list token that uBlock Origin does not know,
   or one of uBlock Origin's default lists missing from our toOverwrite.filterLists.
+- uBlock Origin consent (Store policy 10.1.5): any add-on that policies.json installs without the user
+  (ExtensionSettings force_installed or normal_installed, Extensions.Install); a policy that switches
+  about:welcome off (OverrideFirstRunPage, DisableAccounts, DisableFirefoxAccounts, UserMessaging
+  SkipOnboarding); orbis.cfg not locking about:welcome on as the first-run page with
+  ORBIS_UBO_CONSENT_SCREENS; and in those screens: not exactly one INSTALL_ADDON_FROM_URL, or that one not
+  the uBlock Origin AMO URL in the checkedAction of a checkbox that is on by default, or the Continue button
+  not collecting the checkbox, or no screen after it (leaving about:welcome cancels an install whose
+  permission prompt is still open).
 
 Prints OK, or every problem found. Reads files only; changes nothing.
 """
@@ -49,6 +57,11 @@ PREF_FILES = (
 SCHEMA_FILE = "browser/components/enterprisepolicies/schemas/policies-schema.json"
 VERSION_FILE = "browser/config/version.txt"
 UBO_ID = "uBlock0@raymondhill.net"
+UBO_AMO_URL = "https://addons.mozilla.org/firefox/downloads/latest/uBlock0@raymondhill.net/latest.xpi"
+CONSENT_VAR = "ORBIS_UBO_CONSENT_SCREENS"
+SILENT_INSTALL_MODES = ("force_installed", "normal_installed")
+# Policies that lock browser.aboutwelcome.enabled to false (Policies.sys.mjs), which removes the consent screen.
+WELCOME_OFF_POLICIES = ("OverrideFirstRunPage", "DisableAccounts", "DisableFirefoxAccounts")
 
 # Code search (full checkout only): folders that hold product code, and file types that read prefs.
 CODE_DIRS = ("browser", "toolkit", "services", "netwerk", "modules", "dom", "security", "extensions",
@@ -329,6 +342,85 @@ class Validator:
 
 
 # --------------------------------------------------------------------------------------------------
+# uBlock Origin consent (Store policy 10.1.5)
+# --------------------------------------------------------------------------------------------------
+
+def find_installs(node, path="screens"):
+    """Every (path, action) in node whose type is INSTALL_ADDON_FROM_URL."""
+    found = []
+    if isinstance(node, dict):
+        if node.get("type") == "INSTALL_ADDON_FROM_URL":
+            found.append((path, node))
+        for k, v in node.items():
+            found += find_installs(v, "%s.%s" % (path, k))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            found += find_installs(v, "%s[%d]" % (path, i))
+    return found
+
+
+def check_ubo_consent(cfg_text, calls, policies):
+    """Fails unless uBlock Origin is installed only through the first-run consent screen."""
+    for eid, s in policies.get("ExtensionSettings", {}).items():
+        if isinstance(s, dict) and s.get("installation_mode") in SILENT_INSTALL_MODES:
+            fail("ExtensionSettings.%s: %s installs it without the user's consent (Store policy 10.1.5)"
+                 % (eid, s["installation_mode"]))
+    if policies.get("Extensions", {}).get("Install"):
+        fail("Extensions.Install installs add-ons without the user's consent (Store policy 10.1.5)")
+    for p in WELCOME_OFF_POLICIES:
+        if p in policies:
+            fail("policy %s locks browser.aboutwelcome.enabled to false: the uBlock Origin consent screen "
+                 "would not show" % p)
+    if policies.get("UserMessaging", {}).get("SkipOnboarding"):
+        fail("UserMessaging.SkipOnboarding switches about:welcome off: the uBlock Origin consent screen "
+             "would not show")
+
+    locked = {name: (val or "").strip() for fn, name, val, _ in calls if fn == "lockPref"}
+    for name, want in (("browser.aboutwelcome.enabled", "true"),
+                       ("startup.homepage_welcome_url", "\"about:welcome\""),
+                       ("browser.aboutwelcome.screens", "JSON.stringify(%s" % CONSENT_VAR)):
+        if locked.get(name) != want:
+            fail("orbis.cfg: %s must be locked to %s%s" % (name, want, ")" if "(" in want else ""))
+
+    m = re.search(r"^var %s = (\[.*?^\]);" % CONSENT_VAR, cfg_text, re.M | re.S)
+    if not m:
+        fail("orbis.cfg: no 'var %s = [...];' block" % CONSENT_VAR)
+        return
+    try:
+        screens = json.loads(m.group(1))
+    except ValueError as e:
+        fail("orbis.cfg: %s is not strict JSON: %s" % (CONSENT_VAR, e))
+        return
+    installs = find_installs(screens)
+    if len(installs) != 1:
+        fail("%s: %d INSTALL_ADDON_FROM_URL actions; exactly one (uBlock Origin) is allowed"
+             % (CONSENT_VAR, len(installs)))
+        return
+    path, action = installs[0]
+    if action.get("data", {}).get("url") != UBO_AMO_URL:
+        fail("%s: the install URL must be %s" % (CONSENT_VAR, UBO_AMO_URL))
+    first = screens[0].get("content", {}) if screens else {}
+    tiles = first.get("tiles", {})
+    items = tiles.get("data", []) if tiles.get("type") == "multiselect" else []
+    owner = [i for i, item in enumerate(items) if find_installs(item.get("checkedAction"))]
+    if not re.fullmatch(r"screens\[0\]\.content\.tiles\.data\[\d+\]\.checkedAction(\..*)?", path) or not owner:
+        fail("%s: the install is at %s; it must be in the checkedAction of a checkbox on the first screen"
+             % (CONSENT_VAR, path))
+        return
+    item = items[owner[0]]
+    if item.get("defaultValue") is not True or item.get("type", "checkbox") != "checkbox":
+        fail("%s: the uBlock Origin item must be a checkbox with defaultValue true" % CONSENT_VAR)
+    button = first.get("primary_button", {}).get("action", {})
+    if not (button.get("type") == "MULTI_ACTION" and button.get("collectSelect") is True):
+        fail("%s: the first screen's button must be a MULTI_ACTION with collectSelect" % CONSENT_VAR)
+    if find_installs(button):
+        fail("%s: the first screen's button must not install anything itself" % CONSENT_VAR)
+    if not (button.get("navigate") is True and len(screens) >= 2):
+        fail("%s: the first screen must navigate to a second screen; leaving about:welcome would cancel the "
+             "install while Firefox's permission prompt is open" % CONSENT_VAR)
+
+
+# --------------------------------------------------------------------------------------------------
 
 def main():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -447,6 +539,8 @@ def main():
         v.compat(schema["properties"][pname], pname)
         for e in v.errors(pval, schema["properties"][pname], pname):
             fail("policy " + e)
+
+    check_ubo_consent("\n".join(cfg_lines), calls, policies)
 
     # ---- docs/SETTINGS.md ------------------------------------------------------------------------
     doc = read_text(args.settings_doc)

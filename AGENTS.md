@@ -47,8 +47,10 @@ Items marked "planned" do not exist yet.
   `browser/moz.configure` sets `MOZ_APP_PROFILE` (patch 0001: the profile build blocker). It does not apply
   `patches/`.
 - `scripts/make-placeholder-branding.ps1`: redraws the TODO placeholder images.
-- `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search engines).
-- `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy covers.
+- `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin allowed and its
+  enforced filter lists, search engines).
+- `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy covers,
+  including the first-run uBlock Origin consent screen (`browser.aboutwelcome.screens`).
   `orbis.cfg` runs in AutoConfig's sandbox: pref functions only, and its first line is skipped by Firefox.
 - `scripts/check-settings.py`: fails on unknown pref names, wrong pref types, invalid policies (checked against the
   pinned source's `policies-schema.json`) and settings missing from `docs/SETTINGS.md`.
@@ -57,8 +59,8 @@ Items marked "planned" do not exist yet.
 - `mozconfig`: Windows x64 release build options. `scripts/check-mozconfig.py` checks them against the source.
 - `docs/BUILD.md`: build, package and check steps of the first build, and the packaging gap (`mach package` leaves
   out `orbis-dist`).
-- `scripts/verify-build.py`: checks a built Orbis through Marionette (profile folder, prefs, policies, uBlock
-  Origin, idle DNS lookups, About dialog). Needs a build and the Firefox checkout's Marionette client.
+- `scripts/verify-build.py`: checks a built Orbis through Marionette (profile folder, prefs, policies, the uBlock
+  Origin consent screen accepted and declined, idle DNS lookups, About dialog). Needs a build and the Firefox checkout's Marionette client.
 - `scripts/make-msix.ps1` + `packaging/msix-config.json`: unsigned MSIX from the packaged build with
   `mach repackage msix` (zip plus `orbis-dist`), then `makeappx unpack` checks of the manifest, assets and policy
   files. Store identity values are `TODO-STORE` placeholders (loud warning; `-RequireStoreIdentity` refuses
@@ -76,7 +78,9 @@ Items marked "planned" do not exist yet.
 - **Never change a sandbox, process-model, JIT or add-on-signing default.** `MOZ_REQUIRE_SIGNING` stays on.
 - Three layers, in this order of preference: build option (removes code), policy (named switch), AutoConfig pref.
 - Every setting has a row in `docs/SETTINGS.md`. A setting without a reason does not merge.
-- uBlock Origin is installed from addons.mozilla.org by policy. Never put an XPI in the repository or the package.
+- uBlock Origin is installed from addons.mozilla.org only after the user agrees on the first-run screen
+  (`about:welcome`, screens in `orbis.cfg`; Store policy 10.1.5). No policy may install an add-on silently. Never
+  put an XPI in the repository or the package.
 - The updater, crash reporter, default-browser agent and maintenance service are not built.
 - Any new host in the network audit fails the build until it is added to the allow-list with a reason or blocked.
 

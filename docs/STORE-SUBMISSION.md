@@ -22,11 +22,13 @@ Partner Center asks why the package declares a restricted capability. Paste this
 
 Paste the justification above, followed by this addendum, unchanged:
 
-> On first run Orbis installs the uBlock Origin extension from addons.mozilla.org (stated in the description),
-> and telemetry is disabled.
+> On first run Orbis shows one screen that offers the uBlock Origin content blocker ("Install uBlock Origin ad
+> blocker", checked by default). It is downloaded from addons.mozilla.org only if the user continues with the
+> box checked and confirms the browser's add-on permission prompt; with the box unchecked nothing is downloaded
+> or installed. The extension is not included in the package. Telemetry is disabled.
 
-The Store description must then really state the uBlock Origin install. That is disclosure, not consent:
-see policy 10.1.5 under "Risks".
+The Store description should say the same: uBlock Origin is offered at first run and downloaded from
+addons.mozilla.org if the user agrees (see policy 10.1.5 under "Risks").
 
 ## Blockers before the first submission
 
@@ -42,8 +44,9 @@ In this order:
    tile background `#20123A` is Firefox purple.
 4. **An install test that proves the policies and AutoConfig work inside the MSIX.** Nothing has been installed
    yet. The test must show, in the installed package: `policies.json` active (`about:policies`), the
-   `orbis.cfg` prefs locked, uBlock Origin installed, and no Mozilla `distribution.ini`. Method: option 4, then
-   option 1 in `docs/MSIX.md`, "Local install test".
+   `orbis.cfg` prefs locked, the uBlock Origin consent screen on first run (uBlock Origin installed after
+   "Continue" with the box checked, nothing installed with it unchecked), and no Mozilla `distribution.ini`.
+   Method: option 4, then option 1 in `docs/MSIX.md`, "Local install test".
 
 ## Store policy 10.2.1: engine currency
 
@@ -62,13 +65,18 @@ covers Firefox's point releases (`X.Y.1`, `X.Y.2`, often security fixes): ship e
 Policy numbers and quotes are from the Microsoft Store Policies **v7.20, effective 2026-10-22**. Text in quotes
 is the policy's wording; the rest summarises it.
 
-- **uBlock Origin auto-install versus policy 10.1.5. The risk remains.** The policy allows a product to offer
-  add-ons only "with user consent and after initial download of the primary product". Orbis installs uBlock
-  Origin silently on first run (`ExtensionSettings` in `policies.json`): there is no consent step. Stating it in
-  the Store description and the certification notes (above) is **disclosure, not consent**, so it does not
-  remove the risk. The risk stays unless Orbis asks at first run (for example a first-run prompt, with "no"
-  leaving uBlock Origin uninstalled). **Shibi decides** whether to add a consent step or to submit as is and
-  accept the risk. The extension comes from addons.mozilla.org, not from the package (no XPI is shipped).
+- **Policy 10.1.5 (add-ons): met.** The policy allows a product to offer add-ons only "with user consent and
+  after initial download of the primary product". Shibi decided (2026-11-12) to ask, as Orbis for Android does:
+  Orbis installs nothing by policy (`ExtensionSettings` only allows uBlock Origin), and the first window of a
+  new profile shows a consent screen (`docs/SETTINGS.md`, "First run: uBlock Origin consent screen"). uBlock
+  Origin is downloaded from addons.mozilla.org only after the user continues with "Install uBlock Origin ad
+  blocker" checked (the default) and accepts Firefox's own "Add uBlock Origin?" permission prompt; with the box
+  unchecked nothing is downloaded. The screen is shown once per profile. The extension is not in the package (no
+  XPI is shipped). Checked by `scripts/check-settings.py` (no silent install in `policies.json`, the install
+  only behind the checkbox) and `scripts/verify-build.py consent` (on a test build, see `docs/BUILD.md`). A
+  reviewer may still ask why the box is checked by default; the answer is that nothing is downloaded until the
+  user clicks Continue on that screen, and nothing is installed until the user also accepts the permission
+  prompt.
 - **Policy 10.2.2 (dynamic code).** A product must not download or run code that changes its described
   functionality. uBlock Origin is downloaded after install, and its filter lists update from the network. Be
   ready to explain that it is a declared, signed browser extension (`MOZ_REQUIRE_SIGNING` stays on) that

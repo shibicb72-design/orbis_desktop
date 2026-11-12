@@ -19,9 +19,10 @@ value has the wrong type or is not allowed by the policy schema, or if a setting
 
 ## Defaults: decided by Shibi, and pending Shibi's OK
 
-Shibi decided (2026-11-12): Microsoft Store only, release channel, Google Safe Browsing off, uBlock Origin installed
-automatically with Orbis's filter lists enforced at every launch (including "Phishing URL Blocklist"), push
-websocket kept, AMO metadata cache off, no servers, accounts, sync, analytics, telemetry or studies, English only.
+Shibi decided (2026-11-12): Microsoft Store only, release channel, Google Safe Browsing off, uBlock Origin offered
+on a first-run screen (on by default, installed only if the user keeps it on) with Orbis's filter lists enforced at
+every launch once installed (including "Phishing URL Blocklist"), push websocket kept, AMO metadata cache off, no
+servers, accounts, sync, analytics, telemetry or studies, English only.
 See "Decided by Shibi" below.
 
 ### Pending Shibi's OK
@@ -44,7 +45,7 @@ Shibi has not explicitly approved these. They follow Fable's recommended default
 | Choice | Decision | State in this branch |
 |---|---|---|
 | Google Safe Browsing | Off | Off, every Google endpoint blanked (`orbis.cfg`); phishing and malware protection come from uBlock Origin's lists |
-| uBlock Origin | Installed automatically from addons.mozilla.org | `ExtensionSettings` `normal_installed` |
+| uBlock Origin | Offered at first run, as on Android: "Install uBlock Origin ad blocker", on by default; one click on Continue installs it from addons.mozilla.org, and nothing is installed if the user turns it off (Store policy 10.1.5). Replaces the earlier automatic install | First-run screen in `about:welcome` (`browser.aboutwelcome.screens`, `orbis.cfg`); `ExtensionSettings` only allows uBlock Origin. See "First run: uBlock Origin consent screen" |
 | uBlock Origin filter lists | Option C: Orbis's list set, **enforced at every launch**. A user's list changes reset at the next start | `3rdparty` `toOverwrite.filterLists`, re-applied by uBlock Origin at every launch. Options A and B were rejected (below) |
 | Push websocket (`push.services.mozilla.com`) | Stays on | On (Firefox default) and disclosed in "Network calls that remain" and the privacy policy |
 | AMO metadata cache (`extensions.getAddons.cache.enabled`) | Off | false, locked (`orbis.cfg`) |
@@ -90,7 +91,7 @@ Read from `work-orbis` (`engine/GeckoEngineImpl.kt`, `settings/BrowserSettings.k
 | Google Safe Browsing | On (`ContentBlocking.SafeBrowsing.DEFAULT`) | Off, Google endpoints blanked | Owner decision 2026-11-12 |
 | `about:config` | Blocked (`aboutConfigEnabled(false)`) | Open | Desktop convention; locked prefs stay locked there. Pending OK |
 | Tracking-protection level | Strict, fixed; per-site exceptions only | Strict on first start; the user may switch to Standard or Custom | "Adjustable" ETP. Pending OK |
-| uBlock Origin | From AMO after the user agrees; uBlock Origin's default lists | Installed automatically by policy; default lists plus "Phishing URL Blocklist" | Owner decision 2026-11-12 |
+| uBlock Origin | From AMO after the user agrees (switch on by default); uBlock Origin's default lists | From AMO after the user agrees (checkbox on by default, then Firefox's own "Add uBlock Origin?" permission prompt); default lists plus "Phishing URL Blocklist", enforced at every start | Owner decisions 2026-11-12 (consent screen as on Android; enforced lists). Desktop shows a checkbox, not a switch: Firefox's onboarding page has no switch control |
 | Search engines offered | DuckDuckGo (default), Google, Bing, Brave, Startpage | DuckDuckGo (default), Brave Search and Startpage added, plus Firefox's own built-in list for the user's region (for example Google, Bing, Wikipedia, eBay, Perplexity) | Firefox's built-in list is left alone; removing engines was not decided |
 | DRM | GeckoView default (Orbis sets nothing) | Off, user can enable | Pending OK |
 | Captive-portal check | GeckoView default (Orbis sets nothing) | Off, user can enable | Pending OK |
@@ -108,7 +109,7 @@ telemetry, no accounts, no AI chat.
 | `DisableTelemetry` | `true` | Locked | No telemetry. Locks `datareporting.healthreport.uploadEnabled`, `datareporting.policy.dataSubmissionEnabled`, `datareporting.usage.uploadEnabled`, `toolkit.telemetry.archive.enabled` |
 | `DisableFirefoxStudies` | `true` | Locked | No studies (Shield/Normandy) |
 | `DisableRemoteImprovements` | `true` | Locked | No remote Nimbus rollouts that change the browser between updates |
-| `DisableAccounts` | `true` | Locked | No Firefox accounts or sync. Locks `identity.fxaccounts.enabled` to false. `DisableFirefoxAccounts` is not set: Firefox ignores it when `DisableAccounts` is present |
+| (`DisableAccounts`, not set) | - | - | Replaced by `identity.fxaccounts.enabled` locked false in `orbis.cfg`. In Firefox 160 `DisableAccounts` (and `DisableFirefoxAccounts`) lock that pref and also lock `browser.aboutwelcome.enabled` to false, which would remove the uBlock Origin consent screen. The pref is the policy's only other effect (`Policies.sys.mjs`). `check-settings.py` fails if either policy comes back |
 | `IPProtectionAvailable` | `false` | Locked | The built-in VPN needs a Mozilla account and Mozilla's servers |
 | `DisableAppUpdate` | `true` | Locked | The Microsoft Store updates Orbis. The updater is also not built (PR 4) |
 | `DisableSystemAddonUpdate` | `true` | Locked | `DisableAppUpdate` does not cover system add-ons: with `extensions.systemAddon.update.enabled` (true in firefox.js) Firefox polls `aus5.mozilla.org` for new system add-ons outside the Store. The policy disallows the `SysAddonUpdate` feature, which `AddonManager.systemUpdateEnabled` checks. The built-in system add-ons ship in the package and update with it |
@@ -116,19 +117,19 @@ telemetry, no accounts, no AI chat.
 | `DontCheckDefaultBrowser` | `true` | Locked | No "make default" prompt at every start; the user can still make Orbis the default in Settings |
 | `DisableFeedbackCommands` | `true` | Locked | Removes "Report deceptive site" (goes to Google) and "Submit feedback" (Mozilla) |
 | `SkipTermsOfUse` | `true` | Locked | Mozilla's Terms of Use prompt does not apply to Orbis |
-| `OverrideFirstRunPage` | `""` | Locked | No Mozilla welcome page or onboarding. An Orbis first-run page comes later (PR 9) |
+| (`OverrideFirstRunPage`, not set) | - | - | Any value of this policy also locks `browser.aboutwelcome.enabled` to false. The first-run page is set by `orbis.cfg` instead (`startup.homepage_welcome_url`): Orbis's own consent screen, not Mozilla's onboarding |
 | `OverridePostUpdatePage` | `""` | Locked | No Mozilla "what's new" page after updates |
 | `NoDefaultBookmarks` | `true` | Locked | Firefox's default bookmarks point at Mozilla sites |
 | `FirefoxHome` | `SponsoredTopSites`, `Stories`, `SponsoredStories`, `Weather` false; `Locked` | Locked | No sponsored or recommended content on the new-tab page; stories and weather come from Mozilla's servers |
 | `FirefoxSuggest` | `WebSuggestions`, `SponsoredSuggestions`, `ImproveSuggest`, `OnlineEnabled` false; `Locked` | Locked | No sponsored or Mozilla-served suggestions in the address bar |
-| `UserMessaging` | `ExtensionRecommendations`, `FeatureRecommendations`, `UrlbarInterventions`, `MoreFromMozilla`, `FirefoxLabs` false; `SkipOnboarding` true; `Locked` | Locked | No Mozilla marketing messages. Firefox Labs is opt-in Nimbus experiments. Side effect: `FeatureRecommendations` false with `Locked` also sets and locks `browser.translations.mostRecentTargetLanguages` to the user's first web language, so the translation panel skips its intro and its "recent languages" list stays fixed to that language |
+| `UserMessaging` | `ExtensionRecommendations`, `FeatureRecommendations`, `UrlbarInterventions`, `MoreFromMozilla`, `FirefoxLabs` false; `Locked` | Locked | No Mozilla marketing messages. `SkipOnboarding` is not set: it would switch off `about:welcome`, which shows the uBlock Origin consent screen; Mozilla's own onboarding screens are replaced by `browser.aboutwelcome.screens` instead. Firefox Labs is opt-in Nimbus experiments. Side effect: `FeatureRecommendations` false with `Locked` also sets and locks `browser.translations.mostRecentTargetLanguages` to the user's first web language, so the translation panel skips its intro and its "recent languages" list stays fixed to that language |
 | `AIControls` | `Default` blocked and locked; `Translations` available, not locked | AI features locked off; translation is a default | No AI chatbot (locked). The same `Default` also blocks link-preview key points, smart tab groups, smart window, PDF alt text and speech recognition. Translation runs on the device; its models download from Mozilla (to disclose in the privacy policy) |
 | `HttpsOnlyMode` | `"enabled"` | Default | HTTPS-only in normal and private windows, as on Android. The user can turn it off or add exceptions |
 | `EncryptedMediaExtensions` | `Enabled` false | Default | DRM is a closed Google component downloaded on demand. Netflix and similar sites will not play until the user enables it |
 | `DNSOverHTTPS` | `Enabled` false | Default | No third-party DNS resolver by default. Sets `network.trr.mode` to 5 ("off by choice"), which also stops Mozilla's regional DoH rollout. The user can turn DoH on |
 | `SearchEngines` | `Default` DuckDuckGo; `Add` Brave Search and Startpage | Default | Same default and engines as Android. The added engines have no icon URL (so no request to fetch one) and no suggestion URL (so no search suggestions from them) |
-| `ExtensionSettings` | `*`: allowed types extension, theme, dictionary, sitepermission. `uBlock0@raymondhill.net`: `normal_installed` from addons.mozilla.org, `private_browsing` true | Language packs blocked; uBlock Origin cannot be removed but can be disabled | English only (no `locale` type). uBlock Origin installs automatically on first run and works in private windows; the user can switch it off on a broken site. It is downloaded from AMO, not bundled (GPL-3.0) |
-| `3rdparty` | uBlock Origin `toOverwrite.filterLists`: `user-filters`, `ublock-filters`, `ublock-badware`, `ublock-privacy`, `ublock-unbreak`, `ublock-quick-fixes`, `easylist`, `easyprivacy`, `urlhaus-1`, `plowe-0`, `curben-phishing`, `fanboy-cookiemonster`, `ublock-cookies-easylist` | Enforced: re-applied at every start, so a user's list changes reset at the next start (Shibi's decision, option C; see "Decided by Shibi") | uBlock Origin's own defaults plus "Phishing URL Blocklist" (`curben-phishing`), which stands in for Google Safe Browsing's phishing protection. Malware: `urlhaus-1` and `ublock-badware`. Cookie notices (plan C.2): uBlock Origin's "EasyList/uBO – Cookie Notices" pair, `fanboy-cookiemonster` and `ublock-cookies-easylist`, both off by default in uBlock Origin; the AdGuard pair is not added, to avoid double filtering. These lists hide or block notices; they do not click "accept" or "reject". uBlock Origin applies `toOverwrite` at every launch, so a user's list changes last only until the next start |
+| `ExtensionSettings` | `*`: allowed types extension, theme, dictionary, sitepermission. `uBlock0@raymondhill.net`: `allowed`, `private_browsing` true | Language packs blocked; uBlock Origin is allowed, not installed | English only (no `locale` type). No policy installs uBlock Origin (Store policy 10.1.5): the user chooses on the first-run screen, or installs it later. Once installed it works in private windows, and the user can disable or remove it. It is downloaded from AMO, not bundled (GPL-3.0). `check-settings.py` fails on any `force_installed` or `normal_installed` entry |
+| `3rdparty` | uBlock Origin `toOverwrite.filterLists`: `user-filters`, `ublock-filters`, `ublock-badware`, `ublock-privacy`, `ublock-unbreak`, `ublock-quick-fixes`, `easylist`, `easyprivacy`, `urlhaus-1`, `plowe-0`, `curben-phishing`, `fanboy-cookiemonster`, `ublock-cookies-easylist` | Enforced: re-applied at every start, so a user's list changes reset at the next start (Shibi's decision, option C; see "Decided by Shibi") | uBlock Origin's own defaults plus "Phishing URL Blocklist" (`curben-phishing`), which stands in for Google Safe Browsing's phishing protection. Malware: `urlhaus-1` and `ublock-badware`. Cookie notices (plan C.2): uBlock Origin's "EasyList/uBO – Cookie Notices" pair, `fanboy-cookiemonster` and `ublock-cookies-easylist`, both off by default in uBlock Origin; the AdGuard pair is not added, to avoid double filtering. These lists hide or block notices; they do not click "accept" or "reject". uBlock Origin applies `toOverwrite` at every launch, so a user's list changes last only until the next start. It applies whenever uBlock Origin is installed, from the consent screen or later by hand; without uBlock Origin it does nothing |
 
 ## Prefs (`orbis.cfg`)
 
@@ -211,7 +212,7 @@ Mozilla's GMP manifest.
 
 | Pref | Value | Locked? | Reason | Source |
 |---|---|---|---|---|
-| `signon.firefoxRelay.feature` | `""` | Locked | No Firefox Relay email-mask offers in login forms. `""` is not one of the values `LoginHelper` treats as available (`available`, `offered`, `enabled`, `disabled`), so Firefox treats the feature as not available. Relay needs a Mozilla account, which `DisableAccounts` blocks anyway | firefox.js |
+| `signon.firefoxRelay.feature` | `""` | Locked | No Firefox Relay email-mask offers in login forms. `""` is not one of the values `LoginHelper` treats as available (`available`, `offered`, `enabled`, `disabled`), so Firefox treats the feature as not available. Relay needs a Mozilla account, which `identity.fxaccounts.enabled` (locked false) blocks anyway | firefox.js |
 | `browser.contentblocking.report.monitor.enabled` | false | Locked | No Mozilla Monitor card in `about:protections` (already false in 160; locked) | firefox.js |
 | `browser.vpn_promo.enabled` | false | Locked | No Mozilla VPN card in `about:protections` and no VPN promotions | firefox.js |
 | `browser.contentblocking.report.show_mobile_app` | false | Locked | No Firefox mobile-app promotion in `about:protections` | firefox.js |
@@ -225,6 +226,55 @@ Mozilla's GMP manifest.
 | `browser.region.update.enabled` | false | Locked | Same | all.js |
 | `network.captive-portal-service.enabled` | false | Default | No check request to Mozilla at start and on network changes. Hotel or airport Wi-Fi login pages will not open by themselves; the user can turn it back on | StaticPrefList.yaml; firefox.js |
 | `network.connectivity-service.enabled` | false | Default | No connectivity check request to Mozilla | all.js |
+
+### Firefox accounts: locked off
+
+| Pref | Value | Locked? | Reason | Source |
+|---|---|---|---|---|
+| `identity.fxaccounts.enabled` | false | Locked | No Firefox accounts or sync. Set here instead of by the `DisableAccounts` policy, which also locks `about:welcome` off (see "Policies") | firefox.js |
+
+### First run: uBlock Origin consent screen
+
+Shibi's decision (2026-11-12), Store policy 10.1.5 ("with user consent and after initial download of the primary
+product"): uBlock Origin is installed only if the user agrees at first run, as on Orbis for Android.
+
+How it works, with no patch: Firefox 160's onboarding page `about:welcome` shows the screens in
+`browser.aboutwelcome.screens` instead of Mozilla's own. The page and its screens are local; with Nimbus off (the
+`DisableFirefoxStudies` and `DisableRemoteImprovements` policies, `nimbus.rollouts.enabled`, `UserMessaging`
+`FirefoxLabs` false) Firefox reads the screens from that pref (the Nimbus feature's `fallbackPref`), and no
+experiment can replace them. Firefox opens `about:welcome` once, in the first window of a new profile
+(`OVERRIDE_NEW_PROFILE` in `BrowserContentHandler.sys.mjs`), so the question is never asked twice.
+
+The screens (`ORBIS_UBO_CONSENT_SCREENS` in `orbis.cfg`; text from Android's `ubo_onboarding_title`,
+`ubo_disclosure`, `ubo_etp_stays_on`, `ubo_continue` and `ubo_installing`):
+
+1. "Block ads and trackers?", the disclosure (uBlock Origin is a separate GPL-3.0 project, not made or endorsed
+   by Orbis or Mozilla, not included in Orbis; Orbis contacts addons.mozilla.org to download and update it; uBlock
+   Origin downloads its own filter lists; Orbis chooses those lists at every start), one checkbox **"Install
+   uBlock Origin ad blocker", on by default**, and a **Continue** button. Unchecked, the screen says "uBlock Origin
+   will not be installed. Strict tracking protection stays on. You can install uBlock Origin later: open Add-ons
+   and themes and search for uBlock Origin."
+2. Checkbox on: Continue records `accepted`, starts the download from addons.mozilla.org
+   (`INSTALL_ADDON_FROM_URL`, the same AMO URL the policy used) and shows "Installing uBlock Origin...". Firefox
+   then shows its own "Add uBlock Origin?" prompt with the add-on's permissions; "Add" installs it. "Start
+   browsing" opens the home page. Leaving `about:welcome` while that prompt is still open cancels the install
+   (Firefox removes the prompt on navigation); moving to the second screen does not, which is why there is one.
+3. Checkbox off: Continue records `declined` and opens the home page. Nothing is downloaded.
+
+Later installs: Add-ons and themes (`about:addons`) search, or addons.mozilla.org. `ExtensionSettings` allows
+uBlock Origin and keeps it working in private windows, and the `3rdparty` lists apply to any install.
+
+| Pref | Value | Locked? | Reason | Source |
+|---|---|---|---|---|
+| `browser.aboutwelcome.enabled` | true | Locked | `about:welcome` hosts the consent screen. The policies that would lock it false (`DisableAccounts`, `DisableFirefoxAccounts`, `OverrideFirstRunPage`, `UserMessaging` `SkipOnboarding`) are not used; `check-settings.py` fails if one comes back | firefox.js |
+| `browser.aboutwelcome.screens` | `JSON.stringify(ORBIS_UBO_CONSENT_SCREENS)` (the two screens above) | Locked | Replaces Mozilla's onboarding screens (import, default browser, pinning, sign-in) with Orbis's consent screens. `check-settings.py` reads the screens and fails unless the only install action is uBlock Origin's AMO URL in the checked action of a checkbox that is on by default, collected by Continue, with a second screen after it | firefox.js |
+| `browser.aboutwelcome.experimentsGate.enabled` | false | Locked | No splash screen that waits up to 8 seconds for Nimbus experiments before the first screen. Nimbus is off, so `AboutWelcomeParent` would skip the wait anyway; locked so that it never depends on that | firefox.js |
+| `startup.homepage_welcome_url` | `"about:welcome"` | Locked | First-run page of a new profile: the consent screen. The branding (`firefox-branding.js`) sets `""`; this overrides it | code: browser/components/BrowserContentHandler.sys.mjs |
+| `startup.homepage_welcome_url.additional` | `""` | Locked | No second first-run tab | code: browser/components/BrowserContentHandler.sys.mjs |
+| `messaging-system-action.orbis.ubo.consent` | `"accepted"` or `"declined"` | Written once by the screen; not set by `orbis.cfg` | Records the answer (for checks and support). The screen asks for `orbis.ubo.consent`; Firefox's `SET_PREF` action adds the `messaging-system-action.` prefix to every pref outside its allow-list. Not set if the user closes the tab without answering; the screen is not shown again either way | Orbis's own pref |
+
+Not checked yet: the screen in a real window (the tests run headless, see `docs/BUILD.md`), and keyboard and
+screen-reader use of the checkbox.
 
 ### Tracking protection: Strict on first start, then the user's choice
 
@@ -276,9 +326,10 @@ add-on updates; MITM priming; add-on recommendations; the AMO metadata cache.
 | Remote Settings signature certificate | `content-signature-2.cdn.mozilla.net` | When Remote Settings checks the signature of downloaded data, and again when the certificate chain changes or expires | Every Remote Settings collection is signed. Firefox downloads the signer's certificate chain (the `x5u` URL in the collection's metadata) to verify the signature, and rejects data whose signature does not verify. Without it Remote Settings data (CRLite, the add-on blocklist, tracking-protection lists) could not be trusted. Keep and disclose |
 | Push websocket | `wss://push.services.mozilla.com` (`dom.push.serverURL`) | Opened at every start and kept open | Remote Settings uses it to learn of new data at once (broadcast), and websites use it for Web Push notifications. The connection carries a per-profile ID (UAID) that lets Mozilla's push server recognise the same profile across starts, and Mozilla sees the IP address. **On by Shibi's decision (2026-11-12)**: turning it off (`dom.push.enabled`) would delay security data to Remote Settings' periodic poll and break site notifications. Disclose in the privacy policy |
 | GMP manifest and OpenH264 | `aus5.mozilla.org` (manifest); `ciscobinary.openh264.org` (OpenH264 download) | Manifest about once a day; OpenH264 once and on its updates | OpenH264 is the video codec WebRTC calls need. The manifest also lists Widevine, which is downloaded only if the user turns DRM on. Keep and disclose |
-| Add-on updates and the uBlock Origin install | `addons.mozilla.org`, `versioncheck-bg.addons.mozilla.org` | uBlock Origin download on first start; update checks about once a day | uBlock Origin is installed from AMO, not bundled (GPL-3.0), and must stay current. Unavoidable while add-ons are installed from AMO |
-| uBlock Origin filter lists | `ublockorigin.github.io`, `ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `secure.fanboy.co.nz`, `raw.githubusercontent.com`, `malware-filter.gitlab.io`, `curbengh.github.io`, `phishing-filter.pages.dev`, `pgl.yoyo.org` | On first start, then on uBlock Origin's own update schedule (several days per list) | The lists are the malware, phishing, tracker and cookie-notice protection. Requests from uBlock Origin, not from Firefox. uBlock Origin lists several mirrors per list and picks one per download, so the hosts vary between runs. `raw.githubusercontent.com` is the `contentURL` of uBlock Origin's list catalogue, `assets.json`, which uBlock Origin updates like a list (its `cdnURLs`, `ublockorigin.github.io`, `ublockorigin.pages.dev` and `cdn.jsdelivr.net`, are tried too); `curbengh.github.io` and `phishing-filter.pages.dev` were not seen in the first idle run but are contacted on list updates: in uBlock Origin's `assets.json` they are mirrors (`cdnURLs`), next to `malware-filter.gitlab.io`, of "Phishing URL Blocklist" (`curben-phishing`: both hosts) and "Online Malicious URL Blocklist" (`urlhaus-1`: `curbengh.github.io`) |
-| Public suffix list | `publicsuffix.org` | First start, then on uBlock Origin's update schedule | Requested by uBlock Origin (`public_suffix_list.dat` in its `assets.json`), which needs the current public suffix list to tell which part of a host name is the site (`example.co.uk`), for first-party and third-party rules. uBlock Origin ships a copy and updates it from `publicsuffix.org`. Keep and disclose |
+| Add-on updates and the uBlock Origin install | `addons.mozilla.org`, `versioncheck-bg.addons.mozilla.org` | uBlock Origin download only after the user agrees on the first-run screen (or installs it later); update checks about once a day | uBlock Origin is installed from AMO, not bundled (GPL-3.0), and must stay current. Unavoidable while add-ons are installed from AMO. Consent test (`verify-build.py consent`, 2026-11-12): no `addons.mozilla.org` lookup before the answer, and none at all in 60 seconds after "declined" |
+| DNS prefetch of help links | `support.mozilla.org` (DNS lookup only) | At start, in a profile **without** uBlock Origin | Found by the consent test (2026-11-12): Firefox resolves the host of `support.mozilla.org` links in its own pages (for example the new-tab page's `moz-support-link`) ahead of use (`network.dns.disablePrefetch` false, the Firefox default); with that pref true the lookup is gone. uBlock Origin turns prefetching off by default (it sets `network.dns.disablePrefetch` true, `network.prefetch-next` false and `network.http.speculative-parallel-limit` 0), which is why earlier runs, all with uBlock Origin, never showed this host. **To decide (Shibi):** set those prefs in `orbis.cfg` so that a profile without uBlock Origin does not prefetch either, or keep and disclose |
+| uBlock Origin filter lists | `ublockorigin.github.io`, `ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `secure.fanboy.co.nz`, `raw.githubusercontent.com`, `malware-filter.gitlab.io`, `curbengh.github.io`, `phishing-filter.pages.dev`, `pgl.yoyo.org` | Only with uBlock Origin installed: right after the install, then on uBlock Origin's own update schedule (several days per list) | The lists are the malware, phishing, tracker and cookie-notice protection. Requests from uBlock Origin, not from Firefox. uBlock Origin lists several mirrors per list and picks one per download, so the hosts vary between runs. `raw.githubusercontent.com` is the `contentURL` of uBlock Origin's list catalogue, `assets.json`, which uBlock Origin updates like a list (its `cdnURLs`, `ublockorigin.github.io`, `ublockorigin.pages.dev` and `cdn.jsdelivr.net`, are tried too); `curbengh.github.io` and `phishing-filter.pages.dev` were not seen in the first idle run but are contacted on list updates: in uBlock Origin's `assets.json` they are mirrors (`cdnURLs`), next to `malware-filter.gitlab.io`, of "Phishing URL Blocklist" (`curben-phishing`: both hosts) and "Online Malicious URL Blocklist" (`urlhaus-1`: `curbengh.github.io`) |
+| Public suffix list | `publicsuffix.org` | Only with uBlock Origin installed: after the install, then on uBlock Origin's update schedule | Requested by uBlock Origin (`public_suffix_list.dat` in its `assets.json`), which needs the current public suffix list to tell which part of a host name is the site (`example.co.uk`), for first-party and third-party rules. uBlock Origin ships a copy and updates it from `publicsuffix.org`. Keep and disclose |
 | OCSP | The certificate authority's OCSP responder | When a site's certificate needs a revocation check that CRLite (`security.pki.crlite_mode` 2, data from Remote Settings) cannot answer on the device | Certificate revocation checking (`security.OCSP.enabled` 1). It tells the CA which site's certificate is checked. Keep |
 | Search suggestions | `duckduckgo.com` | While the user types in the address bar (not in private windows) | Firefox default, same as Android. The user can turn suggestions off. Disclose |
 | Translation models | Remote Settings attachments (Mozilla's CDN) | Only when the user translates a page into a new language pair | Translation runs on the device; the model is downloaded once. Disclose |

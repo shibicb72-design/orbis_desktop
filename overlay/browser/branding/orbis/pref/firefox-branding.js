@@ -5,7 +5,9 @@
 // This file contains branding-specific prefs. The file name is fixed by
 // browser/branding/branding-common.mozbuild.
 //
-// Orbis: no Mozilla start, welcome or update pages. The update prefs of the
+// Orbis: no Mozilla start, welcome or update pages. orbis.cfg locks
+// startup.homepage_welcome_url to about:welcome, which shows Orbis's own
+// uBlock Origin consent screen, not Mozilla's onboarding. The update prefs of the
 // unofficial template are dropped: Orbis builds no updater (the Microsoft Store
 // updates it). The template's devtools.selfxss.count = 5 is dropped too, so the
 // console keeps Firefox's paste warning against self-XSS scams.
