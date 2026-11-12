@@ -33,8 +33,16 @@ Items marked "planned" do not exist yet.
 - `scripts/fetch-firefox.ps1`: shallow fetch of the pinned tag into `%USERPROFILE%\orbis_desktop_src\firefox` (or a
   given path); stops on a hash mismatch.
 - `scripts/check-firefox-currency.ps1`: exits non-zero when Mozilla's latest release is newer than the pin, or when
-  the pin is that release but still a `_BUILD` tag or not the commit of its `_RELEASE` tag.
-- `docs/UPDATING.md`: how to move the pin to a new Firefox release.
+  the pin is that release but still a `_BUILD` tag or not the commit of its `_RELEASE` tag. On exit code 1 it also
+  prints Mozilla's release date, the 3-day deadline and the majors behind; `-ReportFile` writes them as JSON.
+- `.github/workflows/firefox-currency.yml`: runs the currency check daily (and on demand) on `windows-latest` with
+  Windows PowerShell 5.1. Behind or stale: opens or updates the issue "Firefox pin is out of date" (label
+  `firefox-update`). Current: closes it. Check error: the job fails and no issue is changed. Only `GITHUB_TOKEN`,
+  no other secrets, no actions besides `actions/checkout` pinned by commit.
+- `scripts/sync-currency-issue.ps1`: the workflow's issue step (GitHub CLI). `-DryRun` prints the issue text only.
+- `tests/test-firefox-currency.ps1`: offline test of the currency check and the issue text with test pins, local
+  feed files and a throw-away git repository.
+- `docs/UPDATING.md`: how to move the pin to a new Firefox release, and what the daily workflow does.
 - `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
   `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`), the
   executables' version resource (company Orbis, no Firefox trademark line), the About dialog (no Mozilla
@@ -67,7 +75,7 @@ Items marked "planned" do not exist yet.
   blockers, policy 10.2.1 engine currency, and policy risks.
 - `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
   Android.
-- (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.
+- (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`. Now: `test-firefox-currency.ps1` only.
 
 ## Design rules
 
@@ -86,6 +94,7 @@ Available now:
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-firefox-currency.ps1   # is the pin current?
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-firefox-currency.ps1      # offline test of that check
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-firefox.ps1            # pinned source (large)
 python -I scripts/check-mozconfig.py                                                      # mozconfig options vs the source
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-patches.ps1 -Check     # do the patches apply?
@@ -116,7 +125,8 @@ never read whole).
 ## Engine currency
 
 - `scripts/check-firefox-currency.ps1` fails when Mozilla's latest release is newer than `upstream/firefox.json`.
-  (Planned: `.github/workflows/engine-currency.yml` runs it daily.)
+  `.github/workflows/firefox-currency.yml` runs it daily and keeps the `firefox-update` issue open while the pin is
+  behind. The issue gives the 3-day deadline and warns at 2 majors behind.
 - Build from the release-candidate tag (`FIREFOX_<n>_BUILD1`) as soon as it appears; submit to the Store with a
   publishing hold; publish on release day if the `_RELEASE` tag is the same commit.
 - Store policy 10.2.1: never more than 2 major versions behind Firefox. The Orbis rule is much stricter (see README).

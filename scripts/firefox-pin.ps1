@@ -19,11 +19,11 @@ function Read-FirefoxPin {
     $commit = [string]$pin.commit
 
     if ([string]::IsNullOrWhiteSpace($repository)) { throw "Pin file has no 'repository': $Path" }
-    $m = [regex]::Match($tag, '^FIREFOX_(\d+)_(\d+)(?:_(\d+))?_(?:RELEASE|BUILD\d+)$')
+    $m = [regex]::Match($tag, '^FIREFOX_(\d+)_(\d+)(?:_(\d+))?_(?:RELEASE|BUILD\d+)\z')
     if (-not $m.Success) {
         throw "Pin file 'tag' is not a Firefox release tag (FIREFOX_<major>_<minor>[_<patch>]_RELEASE or _BUILD<n>): '$tag'"
     }
-    if ($commit -cnotmatch '^[0-9a-f]{40}$') {
+    if ($commit -cnotmatch '^[0-9a-f]{40}\z') {
         throw "Pin file 'commit' must be a full 40-character lower-case hex SHA-1: '$commit'"
     }
 
@@ -42,7 +42,7 @@ function ConvertTo-FirefoxVersion {
     # '160.0' -> [version]'160.0.0.0'. Padding avoids [version]'160.0' -lt [version]'160.0.0'.
     param([Parameter(Mandatory = $true)][string]$Text)
 
-    if ($Text -notmatch '^\d+(\.\d+){1,3}$') {
+    if ($Text -notmatch '^\d+(\.\d+){1,3}\z') {
         throw "Not a plain Firefox release version: '$Text'"
     }
     $parts = @($Text.Split('.'))

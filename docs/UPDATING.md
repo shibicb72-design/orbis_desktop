@@ -26,6 +26,55 @@ the tag points at the pinned commit.
 | 1 | `STALE`: the pin is Mozilla's latest version but is still the `_BUILD` tag, or the `_RELEASE` tag is a different commit. Switch the pin to the `_RELEASE` tag and its commit |
 | 2 | The check failed (network, git, feed format, pin file). Treat as a failure too |
 
+On exit code 1 the script also prints:
+
+- the first release the pin lacks: the earliest release in `firefox_history_major_releases.json` and
+  `firefox_history_stability_releases.json` that is newer than the pin (for a stale pin, the pinned version);
+- Mozilla's release date of that release, and the Orbis deadline (that date + 3 days). A later release does not
+  move the deadline: with the pin at 160.0, 160.0.1 on 2026-11-17 and 160.0.2 on 2026-11-24, the deadline is
+  2026-11-20;
+- how many major versions the pin is behind. At 2 it warns: Microsoft Store policy 10.2.1 allows at most 2.
+
+If no history entry is newer than the pin (the feed has the new version before the history does), the date is
+the feed's `LAST_RELEASE_DATE`. That date can be earlier than the real release date of a dot release, so the
+deadline can come out early. That is the safe direction. If the history feeds fail, the date is "unknown" and the
+exit code stays 1. `NEXT_RELEASE_DATE` is printed only if it is a plain `yyyy-mm-dd` date. `-ReportFile FILE`
+writes the result as JSON.
+
+## The daily check on GitHub
+
+`.github/workflows/firefox-currency.yml` runs the check every day at 06:17 UTC, and on demand (Actions tab, "Firefox
+currency", "Run workflow"). It runs on `windows-latest` with Windows PowerShell 5.1 (`shell: powershell`), because
+the scripts use Windows paths. It uses only the workflow's `GITHUB_TOKEN` (`contents: read`, `issues: write`) and
+the GitHub CLI that comes with the runner.
+
+| Check result | What the workflow does |
+|---|---|
+| Behind or stale (exit 1) | Opens the issue **Firefox pin is out of date** with the label `firefox-update` (creates the label only if it is missing). If that issue is already open, it replaces the body and adds one comment, but only when something changed (new version, deadline passed). The issue lists the latest version, the first release the pin lacks and its release date, the 3-day deadline and the number of majors behind, with a Store 10.2.1 warning at 2 or more. The job stays green, with a warning |
+| Current (exit 0) | Closes the open **Firefox pin is out of date** issue with a comment |
+| Check failed (exit 2, or exit 1 without a report) | The job fails (red, with an error note). No issue is opened, changed or closed |
+
+The issue is matched by its exact title and label. Other issues with the `firefox-update` label are never touched.
+Do not edit the issue body: the next run overwrites it. Comment instead. The body contains no error text from
+the feeds, so a feed hiccup does not change it.
+
+The deadline is marked "(passed)" when the run's date, in UTC, is after it. Your local date can differ from the
+UTC date, so the mark can be up to a day off.
+
+A failed scheduled run sends an email only to the person who last changed the `cron` line, not to the repository
+owner or watchers. Check the Actions tab, or change the `cron` line yourself, so that the emails come to you.
+
+GitHub runs scheduled workflows only from the default branch, and turns them off in a public repository after 60
+days without any commit. If that happens, the Actions tab shows a button to turn the workflow back on.
+
+Test the check and the issue text offline (local feed files, a throw-away git repository, no GitHub):
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-firefox-currency.ps1
+```
+
+`scripts\sync-currency-issue.ps1 -ReportFile FILE -DryRun` prints the issue text for a report without calling GitHub.
+
 ## Move the pin to a new release
 
 1. Find the tag and its commit:
