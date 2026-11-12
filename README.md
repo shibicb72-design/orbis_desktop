@@ -2,14 +2,18 @@
 
 Orbis Desktop is a private web browser for Windows. It is the desktop sibling of Orbis for Android.
 
+**Status: pre-release.** Nothing has been published yet: there is no release build and no Microsoft Store listing.
+The features below describe the target, not a finished product.
+
 ## What it is
 
-- **A rebranded Firefox.** Orbis Desktop is built from Mozilla's Firefox source code, unchanged except for Orbis's
-  own name, icons and privacy settings.
+- **Built from Firefox source code.** Orbis Desktop is built from Mozilla's Firefox source code. Orbis adds its own
+  name, icons and privacy settings, leaves out the updater, crash reporter and default-browser agent, and may carry
+  a small number of patches to Mozilla's files. Every change is in this repository.
 - **Not affiliated with Mozilla.** Orbis Desktop is not made by, endorsed by, or affiliated with Mozilla.
 - **No Firefox trademarks.** The browser does not use the Firefox or Mozilla names or logos. The only mention is the
   truthful attribution "based on Mozilla's Firefox source code". Firefox and Mozilla are trademarks of the Mozilla
-  Foundation.
+  Foundation. Microsoft and Windows are trademarks of the Microsoft group of companies.
 - **Microsoft Store only.** Orbis Desktop is distributed and updated only through the Microsoft Store. There is no
   other download and no built-in updater.
 - **No servers, accounts, sync or analytics.** Orbis's developer runs no servers and receives nothing. There are no
