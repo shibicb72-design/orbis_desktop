@@ -48,6 +48,7 @@ Shibi has not explicitly approved these. They follow Fable's recommended default
 | uBlock Origin filter lists | Option C: Orbis's list set, **enforced at every launch**. A user's list changes reset at the next start | `3rdparty` `toOverwrite.filterLists`, re-applied by uBlock Origin at every launch. Options A and B were rejected (below) |
 | Push websocket (`push.services.mozilla.com`) | Stays on | On (Firefox default) and disclosed in "Network calls that remain" and the privacy policy |
 | AMO metadata cache (`extensions.getAddons.cache.enabled`) | Off | false, locked (`orbis.cfg`) |
+| New-tab default top sites (`browser.newtabpage.activity-stream.default.sites`) | None | `""`, locked (`orbis.cfg`) |
 
 Why the lists are enforced rather than set once: uBlock Origin cannot do "first run only" from policy (read from
 uBlock Origin's current `src/js/start.js`, `storage.js` and `assets.js`):
@@ -201,6 +202,7 @@ Mozilla's GMP manifest.
 |---|---|---|---|---|
 | `security.certerrors.mitm.priming.enabled` | false | Locked | On a certificate error page Firefox would fetch `mitmdetection.services.mozilla.com` to detect interception software | firefox.js |
 | `browser.topsites.contile.enabled` | false | Locked | Contile serves sponsored top sites from Mozilla's server; `FirefoxHome` already hides them, this stops the fetch too | firefox.js |
+| `browser.newtabpage.activity-stream.default.sites` | `""` | Locked | Shibi, 2026-11-12: no default top sites on the new-tab page; the tiles fill only from the user's own history and pins. Why: Firefox 160 takes its defaults from the Remote Settings `top-sites` collection; with region lookup off (below) no region is known, and that collection then adds "Add-ons for Firefox" (`addons.mozilla.org`, shown with the Firefox logo). Read in the source: when this pref is locked, `_readDefaults` (`TopSitesFeed.sys.mjs` for the new-tab page, `TopSites.sys.mjs` for the address bar) calls `refreshDefaults` with its value and returns before `_getRemoteConfig` (Remote Settings) and `_readContile`; `refreshDefaults("")` empties the default list and adds nothing, so there are zero default tiles. Locking also keeps Activity Stream from writing its region default into the pref (libpref does not change a locked default). Contile's own fetch stays off through `FirefoxHome` (`SponsoredTopSites` false) and `browser.topsites.contile.enabled`. Only the defaults are locked: the user can still pin, edit and remove top sites | code: browser/extensions/newtab/lib/TopSitesFeed.sys.mjs, browser/components/topsites/TopSites.sys.mjs |
 | `extensions.getAddons.showPane` | false | Locked | No "Recommendations" pane in `about:addons` (content from addons.mozilla.org) | code: toolkit/mozapps/extensions/content/aboutaddons-utils.mjs |
 | `extensions.htmlaboutaddons.recommendations.enabled` | false | Locked | No recommended add-ons in the `about:addons` lists | all.js |
 | `extensions.getAddons.cache.enabled` | false | Locked | Shibi, 2026-11-12. No daily request that sends the IDs of installed add-ons to `services.addons.mozilla.org`; the existing cache is cleared. Add-on updates still work: they ask `versioncheck-bg.addons.mozilla.org`, not this cache, and the add-on blocklist comes from Remote Settings. Effect in `about:addons`: no AMO rating, review count, AMO description, screenshots, AMO icons or AMO listing link; add-ons show the name, description and icon from their own manifest | firefox.js |
@@ -250,8 +252,19 @@ pref functions. The loader does not change `general.config.sandbox_enabled`.
 
 ## Network calls that remain
 
-What Orbis still sends with these settings, read from the Firefox 160 source (Fable's review, 2026-11-12). Nothing
-here was captured on the wire yet; the network audit (PR 8) confirms it. Every row goes into the privacy policy.
+What Orbis still sends with these settings, read from the Firefox 160 source (Fable's review, 2026-11-12). Every row
+goes into the privacy policy. The full network audit is PR 8.
+
+First wire check (first Orbis build, 2026-11-12; `scripts/verify-build.py idle`, see `docs/BUILD.md`): a new
+profile started headless and sampled for 3 minutes. Its DNS log (`MOZ_LOG=nsHostResolver:5`) covers only the
+first 30 seconds (14:24:31 to 14:25:01 UTC): the release build's fast shutdown dropped the rest of the buffered
+log. For the whole 3 minutes there is only TCP sampling every 4 seconds (`f-tcp.json`: 10 remote IP addresses on
+port 443, not matched to host names). In those 30 seconds the DNS log has only hosts in this table: `firefox.settings.services.mozilla.com`, `firefox-settings-attachments.cdn.mozilla.net`,
+`content-signature-2.cdn.mozilla.net`, `push.services.mozilla.com`, `aus5.mozilla.org`, `ciscobinary.openh264.org`,
+`addons.mozilla.org`, `versioncheck-bg.addons.mozilla.org`, `publicsuffix.org`, `ublockorigin.github.io`,
+`ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `secure.fanboy.co.nz`, `malware-filter.gitlab.io` and `pgl.yoyo.org`.
+What happened after the first 30 seconds is not known yet: the next build re-runs the check with
+`MOZ_LOG=timestamp,sync,nsHostResolver:5`, which writes each line unbuffered.
 
 Already off (above): telemetry, Normandy, Nimbus, DAP, crash reports; region lookup; captive-portal and connectivity
 checks; Mozilla's DoH rollout; sponsored content and Contile; Google Safe Browsing and Widevine via Google; system
@@ -259,11 +272,13 @@ add-on updates; MITM priming; add-on recommendations; the AMO metadata cache.
 
 | Call | Host | When | Why it stays |
 |---|---|---|---|
-| Remote Settings | `firefox.settings.services.mozilla.com` (attachments from Mozilla's CDN) | At start and on push notifications | Security data: certificate revocation (CRLite), the add-on blocklist, tracking-protection lists, and more. Turning it off weakens security. Keep and disclose |
+| Remote Settings | `firefox.settings.services.mozilla.com`; attachments from `firefox-settings-attachments.cdn.mozilla.net` | At start and on push notifications | Security data: certificate revocation (CRLite), the add-on blocklist, tracking-protection lists, and more. Turning it off weakens security. Keep and disclose |
+| Remote Settings signature certificate | `content-signature-2.cdn.mozilla.net` | When Remote Settings checks the signature of downloaded data, and again when the certificate chain changes or expires | Every Remote Settings collection is signed. Firefox downloads the signer's certificate chain (the `x5u` URL in the collection's metadata) to verify the signature, and rejects data whose signature does not verify. Without it Remote Settings data (CRLite, the add-on blocklist, tracking-protection lists) could not be trusted. Keep and disclose |
 | Push websocket | `wss://push.services.mozilla.com` (`dom.push.serverURL`) | Opened at every start and kept open | Remote Settings uses it to learn of new data at once (broadcast), and websites use it for Web Push notifications. The connection carries a per-profile ID (UAID) that lets Mozilla's push server recognise the same profile across starts, and Mozilla sees the IP address. **On by Shibi's decision (2026-11-12)**: turning it off (`dom.push.enabled`) would delay security data to Remote Settings' periodic poll and break site notifications. Disclose in the privacy policy |
 | GMP manifest and OpenH264 | `aus5.mozilla.org` (manifest); `ciscobinary.openh264.org` (OpenH264 download) | Manifest about once a day; OpenH264 once and on its updates | OpenH264 is the video codec WebRTC calls need. The manifest also lists Widevine, which is downloaded only if the user turns DRM on. Keep and disclose |
 | Add-on updates and the uBlock Origin install | `addons.mozilla.org`, `versioncheck-bg.addons.mozilla.org` | uBlock Origin download on first start; update checks about once a day | uBlock Origin is installed from AMO, not bundled (GPL-3.0), and must stay current. Unavoidable while add-ons are installed from AMO |
-| uBlock Origin filter lists | `ublockorigin.github.io`, `ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `easylist`/`fanboy` hosts, `malware-filter.gitlab.io`, `curbengh.github.io`, `phishing-filter.pages.dev`, `pgl.yoyo.org` | uBlock Origin's own update schedule (several days per list) | The lists are the malware, phishing, tracker and cookie-notice protection. Requests from uBlock Origin, not from Firefox |
+| uBlock Origin filter lists | `ublockorigin.github.io`, `ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `secure.fanboy.co.nz`, `raw.githubusercontent.com`, `malware-filter.gitlab.io`, `curbengh.github.io`, `phishing-filter.pages.dev`, `pgl.yoyo.org` | On first start, then on uBlock Origin's own update schedule (several days per list) | The lists are the malware, phishing, tracker and cookie-notice protection. Requests from uBlock Origin, not from Firefox. uBlock Origin lists several mirrors per list and picks one per download, so the hosts vary between runs. `raw.githubusercontent.com` is the `contentURL` of uBlock Origin's list catalogue, `assets.json`, which uBlock Origin updates like a list (its `cdnURLs`, `ublockorigin.github.io`, `ublockorigin.pages.dev` and `cdn.jsdelivr.net`, are tried too); `curbengh.github.io` and `phishing-filter.pages.dev` were not seen in the first idle run but are contacted on list updates: in uBlock Origin's `assets.json` they are mirrors (`cdnURLs`), next to `malware-filter.gitlab.io`, of "Phishing URL Blocklist" (`curben-phishing`: both hosts) and "Online Malicious URL Blocklist" (`urlhaus-1`: `curbengh.github.io`) |
+| Public suffix list | `publicsuffix.org` | First start, then on uBlock Origin's update schedule | Requested by uBlock Origin (`public_suffix_list.dat` in its `assets.json`), which needs the current public suffix list to tell which part of a host name is the site (`example.co.uk`), for first-party and third-party rules. uBlock Origin ships a copy and updates it from `publicsuffix.org`. Keep and disclose |
 | OCSP | The certificate authority's OCSP responder | When a site's certificate needs a revocation check that CRLite (`security.pki.crlite_mode` 2, data from Remote Settings) cannot answer on the device | Certificate revocation checking (`security.OCSP.enabled` 1). It tells the CA which site's certificate is checked. Keep |
 | Search suggestions | `duckduckgo.com` | While the user types in the address bar (not in private windows) | Firefox default, same as Android. The user can turn suggestions off. Disclose |
 | Translation models | Remote Settings attachments (Mozilla's CDN) | Only when the user translates a page into a new language pair | Translation runs on the device; the model is downloaded once. Disclose |

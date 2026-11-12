@@ -36,8 +36,9 @@ Items marked "planned" do not exist yet.
   the pin is that release but still a `_BUILD` tag or not the commit of its `_RELEASE` tag.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
 - `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
-  `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`) and the
-  executables' version resource (company Orbis, no Firefox trademark line).
+  `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`), the
+  executables' version resource (company Orbis, no Firefox trademark line) and the About dialog (no Mozilla
+  community, donation, terms or privacy links).
 - `scripts/apply-patches.ps1`: applies `patches/*.patch` to the pinned checkout after `git apply --check`; refuses
   a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing. Run it before `apply-overlay.ps1`.
 - `scripts/apply-overlay.ps1`: copies the branding to `browser/branding/orbis/`, `mozconfig` to the checkout's
@@ -54,6 +55,10 @@ Items marked "planned" do not exist yet.
 - `overlay/browser/branding/orbis/`: name "Orbis"; icons and Store tiles are TODO placeholders. See
   `docs/BRANDING.md` for the trademark rules.
 - `mozconfig`: Windows x64 release build options. `scripts/check-mozconfig.py` checks them against the source.
+- `docs/BUILD.md`: build, package and check steps of the first build, and the packaging gap (`mach package` leaves
+  out `orbis-dist`).
+- `scripts/verify-build.py`: checks a built Orbis through Marionette (profile folder, prefs, policies, uBlock
+  Origin, idle DNS lookups, About dialog). Needs a build and the Firefox checkout's Marionette client.
 - `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
   Android.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`.
