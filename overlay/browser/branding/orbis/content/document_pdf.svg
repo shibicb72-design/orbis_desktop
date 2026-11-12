@@ -1,0 +1,9 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- TODO(PR 9): Orbis placeholder, drawn for Orbis. Replace with the real artwork. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <path d="M38 9h126l54 54v184H38z" fill="#fafafa" stroke="#80808e" stroke-width="3"/>
+  <rect x="28" y="136" width="200" height="100" fill="#2b4fbf"/>
+  <text x="128" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="64" fill="#fff">PDF</text>
+</svg>

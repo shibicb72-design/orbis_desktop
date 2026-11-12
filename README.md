@@ -48,11 +48,11 @@ release. Paths marked "planned" do not exist yet.
 | Path | What |
 |---|---|
 | `upstream/firefox.json` | The Firefox release tag and commit that Orbis is built from |
-| `scripts/` | Fetch the pinned Firefox source, check that it is current; later: apply the overlay, build, package, test |
-| `overlay/` | `distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`; (planned) branding: files copied into the Firefox build |
+| `scripts/` | Fetch the pinned Firefox source, check that it is current, check the settings and mozconfig, apply the patches and the overlay; later: build, package, test |
+| `overlay/` | Files copied into the Firefox build: the policy files (`distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`) and the Orbis branding (`browser/branding/orbis/`, placeholder art) |
 | `patches/` | Changes to Mozilla's own files, kept as few as possible; each one explained in `docs/PATCHES.md` |
-| `mozconfig` | (planned) Build options |
-| `docs/` | Update guide; later: settings rationale, build guide, network audit, Store materials |
+| `mozconfig` | Build options (Windows x64, release; no updater, crash reporter or telemetry reporting) |
+| `docs/` | Update guide, settings rationale, patches, branding rules; later: build guide, network audit, Store materials |
 | `tests/` | (planned) Smoke tests and the network allow-list |
 
 Every difference between Orbis and Firefox is in this repository.

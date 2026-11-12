@@ -24,6 +24,7 @@ When the Firefox pin moves (`docs/UPDATING.md`), run `apply-patches.ps1 -Check` 
 no longer applies is rebased by hand and its index lines regenerated; never applied with `--reject` or fuzz.
 
 Order: `fetch-firefox.ps1`, then `apply-patches.ps1`, then `apply-overlay.ps1` (PR #3), then `mach build`.
+`apply-overlay.ps1` refuses to run until patch 0001's `MOZ_APP_PROFILE` line is in `browser/moz.configure`.
 
 ## The patches
 
@@ -111,3 +112,12 @@ Details (or `(Get-Item orbis.exe).VersionInfo`) shows `CompanyName` Orbis, empty
   **`HKLM\SOFTWARE\Policies\Mozilla\Firefox`** (and the same path under HKCU): any Firefox group policy set by an
   administrator also applies to Orbis, merged with Orbis's `distribution\policies.json`. Not fixed: changing it
   needs the basename (see above) or a patch to `WindowsGPOParser`. Document it; it only matters on managed PCs.
+- **Native messaging, managed storage and PKCS #11 registry keys.** `NativeManifests.sys.mjs` looks up
+  **`Software\Mozilla\NativeMessagingHosts`** (and `ManagedStorage`, `PKCS11Modules`) under HKCU, then HKLM. The path
+  is fixed in the code, not built from the vendor or basename, so any native-messaging host registered for Firefox
+  (password managers, for example) is also offered to Orbis's extensions. Not fixed: only a patch could change it.
+- **Registry-installed add-ons.** `XPIProvider.sys.mjs` (`WinRegLocation`) reads
+  **`SOFTWARE\Mozilla\Firefox\Extensions`** (`SOFTWARE\<vendor>\<basename>\Extensions`; Orbis keeps vendor `Mozilla`
+  and basename `Firefox`) under HKCU and HKLM. An add-on registered there for Firefox is seen by Orbis too; Firefox's
+  default `extensions.autoDisableScopes` (15) installs such add-ons disabled until the user enables them. Not fixed:
+  changing it needs the vendor or basename, or a patch.
