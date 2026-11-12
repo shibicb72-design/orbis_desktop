@@ -35,7 +35,12 @@ Items marked "planned" do not exist yet.
 - `scripts/check-firefox-currency.ps1`: exits non-zero when Mozilla's latest release is newer than the pin, or when
   the pin is that release but still a `_BUILD` tag or not the commit of its `_RELEASE` tag.
 - `docs/UPDATING.md`: how to move the pin to a new Firefox release.
-- (planned) `scripts/apply-overlay.ps1`: copies `overlay/` into the checkout and applies `patches/`.
+- (planned) `scripts/apply-overlay.ps1`: copies `overlay/` into the checkout.
+- `patches/`: changes to Mozilla's files (`git apply` format, `-text` in `.gitattributes`). One row each in
+  `docs/PATCHES.md` with the reason no setting could do it. Now: profile folder `Orbis` (`MOZ_APP_PROFILE`) and the
+  executables' version resource (company Orbis, no Firefox trademark line).
+- `scripts/apply-patches.ps1`: applies `patches/*.patch` to the pinned checkout after `git apply --check`; refuses
+  a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing.
 - (planned) `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search
   engines).
 - (planned) `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy
@@ -63,6 +68,7 @@ Available now:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-firefox-currency.ps1   # is the pin current?
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-firefox.ps1            # pinned source (large)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-patches.ps1 -Check     # do the patches apply?
 ```
 
 Planned:

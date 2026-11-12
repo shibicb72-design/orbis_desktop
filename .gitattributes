@@ -3,3 +3,5 @@
 * text=auto
 LICENSE text eol=lf
 *.ps1 text eol=crlf
+# Patches to Mozilla's files are applied byte for byte (one upstream file has CRLF endings): never convert them.
+patches/** -text

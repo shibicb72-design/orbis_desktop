@@ -1,0 +1,49 @@
+Orbis: version resource of orbis.exe, private_browsing.exe and plugin-container.exe.
+
+CompanyName Mozilla Corporation becomes Orbis, and LegalTrademarks ("Firefox is a Trademark of The
+Mozilla Foundation." in browser/app and pbproxy, the create_rc.py default "Mozilla" in ipc/app) becomes
+empty. The key must be present: without it, config/create_rc.py writes its default, "Mozilla".
+FileDescription and ProductName already come from MOZ_APP_DISPLAYNAME (Orbis).
+ipc/app/module.ver has CRLF line endings upstream; this patch keeps them. See docs/PATCHES.md.
+
+diff --git a/browser/app/module.ver b/browser/app/module.ver
+index 5ef8d2a..1cda1a4 100644
+--- a/browser/app/module.ver
++++ b/browser/app/module.ver
+@@ -1,8 +1,8 @@
+-WIN32_MODULE_COMPANYNAME=Mozilla Corporation
++WIN32_MODULE_COMPANYNAME=Orbis
+ WIN32_MODULE_COPYRIGHT=©Firefox and Mozilla Developers; available under the MPL 2 license.
+ WIN32_MODULE_PRODUCTVERSION=@MOZ_APP_WINVERSION@
+ WIN32_MODULE_PRODUCTVERSION_STRING=@MOZ_APP_VERSION@
+-WIN32_MODULE_TRADEMARKS=Firefox is a Trademark of The Mozilla Foundation.
++WIN32_MODULE_TRADEMARKS=
+ WIN32_MODULE_DESCRIPTION=@MOZ_APP_DISPLAYNAME@
+ WIN32_MODULE_PRODUCTNAME=@MOZ_APP_DISPLAYNAME@
+ WIN32_MODULE_NAME=@MOZ_APP_DISPLAYNAME@
+diff --git a/browser/app/pbproxy/module.ver b/browser/app/pbproxy/module.ver
+index 5ef8d2a..1cda1a4 100644
+--- a/browser/app/pbproxy/module.ver
++++ b/browser/app/pbproxy/module.ver
+@@ -1,8 +1,8 @@
+-WIN32_MODULE_COMPANYNAME=Mozilla Corporation
++WIN32_MODULE_COMPANYNAME=Orbis
+ WIN32_MODULE_COPYRIGHT=©Firefox and Mozilla Developers; available under the MPL 2 license.
+ WIN32_MODULE_PRODUCTVERSION=@MOZ_APP_WINVERSION@
+ WIN32_MODULE_PRODUCTVERSION_STRING=@MOZ_APP_VERSION@
+-WIN32_MODULE_TRADEMARKS=Firefox is a Trademark of The Mozilla Foundation.
++WIN32_MODULE_TRADEMARKS=
+ WIN32_MODULE_DESCRIPTION=@MOZ_APP_DISPLAYNAME@
+ WIN32_MODULE_PRODUCTNAME=@MOZ_APP_DISPLAYNAME@
+ WIN32_MODULE_NAME=@MOZ_APP_DISPLAYNAME@
+diff --git a/ipc/app/module.ver b/ipc/app/module.ver
+index 8abbd23..430c998 100644
+--- a/ipc/app/module.ver
++++ b/ipc/app/module.ver
+@@ -1,4 +1,5 @@
+-WIN32_MODULE_COMPANYNAME=Mozilla Corporation
++WIN32_MODULE_COMPANYNAME=Orbis
++WIN32_MODULE_TRADEMARKS=
+ WIN32_MODULE_PRODUCTVERSION=@MOZ_APP_WINVERSION@
+ WIN32_MODULE_PRODUCTVERSION_STRING=@MOZ_APP_VERSION@
+ WIN32_MODULE_DESCRIPTION=Plugin Container for @MOZ_APP_DISPLAYNAME@
