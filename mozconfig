@@ -1,0 +1,39 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# Orbis Desktop: Windows x64 release build. scripts/apply-overlay.ps1 copies this file to the top of the Firefox
+# checkout. Every option is checked against the pinned source by scripts/check-mozconfig.py.
+
+ac_add_options --enable-application=browser
+ac_add_options --target=x86_64-pc-windows-msvc
+ac_add_options --enable-release
+ac_add_options --enable-optimize
+ac_add_options --disable-debug
+
+# Release update channel: release defaults (and AutoConfig's sandbox for orbis.cfg) without Mozilla's updater.
+ac_add_options --enable-update-channel=release
+
+# Orbis branding, never Mozilla's. --enable-official-branding would override --with-branding.
+ac_add_options --disable-official-branding
+ac_add_options --with-branding=browser/branding/orbis
+# orbis.exe; also the remoting name, so starting Orbis never hands off to a running Firefox.
+ac_add_options --with-app-name=orbis
+
+# The Microsoft Store updates Orbis: no updater, update agent or maintenance service.
+ac_add_options --disable-updater
+ac_add_options --disable-update-agent
+ac_add_options --disable-maintenance-service
+
+# No crash reporter and no default-browser agent.
+ac_add_options --disable-crashreporter
+ac_add_options --disable-default-browser-agent
+
+# Telemetry reporting compiled out (an empty value disables it; it defaults to on only for official Mozilla builds).
+export MOZ_TELEMETRY_REPORTING=
+# Add-on signing enforced. On by default for release milestones; set explicitly so it can never silently change.
+export MOZ_REQUIRE_SIGNING=1
+
+# Build output next to the checkout, outside the Orbis repository
+# (default: %USERPROFILE%\orbis_desktop_src\obj-orbis).
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/../obj-orbis

@@ -42,7 +42,7 @@ release. Paths marked "planned" do not exist yet.
 | `scripts/` | Fetch the pinned Firefox source, check that it is current; later: apply the overlay, build, package, test |
 | `overlay/` | (planned) Branding, `policies.json`, `orbis.cfg`: files copied into the Firefox source tree |
 | `patches/` | (planned) Changes to Mozilla's own files, kept as few as possible |
-| `mozconfig` | (planned) Build options |
+| `mozconfig` | Build options (Windows x64, release; no updater, crash reporter or telemetry reporting) |
 | `docs/` | Update guide; later: settings rationale, build guide, network audit, Store materials |
 | `tests/` | (planned) Smoke tests and the network allow-list |
 
