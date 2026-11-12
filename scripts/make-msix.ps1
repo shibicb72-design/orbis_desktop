@@ -18,11 +18,20 @@ Option A of docs\BUILD.md: the input is a folder, not the zip, so that Orbis's p
 4. Unpacks the MSIX with makeappx and checks it: AppxManifest.xml identity, publisher and display names equal
    the config, the capabilities are exactly the config's list, the logo assets are byte-identical to the
    config's assets folder, the three policy files are in the install folder and identical to orbis-dist, and
-   there is no distribution.ini anywhere in the package.
+   there is no distribution.ini anywhere in the package. The assets check is two-way: the package also has no
+   asset file that the config's folder lacks.
+5. Reports, without failing, every "Mozilla" or "Firefox" left in the package's file names and in the version
+   resources (CompanyName, ProductName, ...) of its .exe and .dll files (docs\BRANDING.md, open items).
+6. Prints the MSIX's SHA-256 and writes it to <output>.sha256 next to the package.
+
+While packaging/msix-config.json still holds TODO-STORE placeholders, the script prints a warning block;
+-RequireStoreIdentity refuses them instead.
 
 It never signs, installs or trusts anything: no certificate, no Add-AppxPackage, no Developer Mode.
-Writes only under -WorkDir (stage, unpack check, mach log) and -Output. A stage or check folder from an earlier
-run is deleted only if it holds this script's marker file.
+Writes under -WorkDir (stage, unpack check, mach log), -Output and <output>.sha256. A stage or check folder from
+an earlier run is deleted only if it holds this script's marker file. mach itself also writes its temporary
+copy of the package to %USERPROFILE%\.mozbuild\cache\mach-msix\msix-temp-<channel>\ and replaces it on every
+run; this script leaves that folder alone.
 
 Exit code 0: MSIX written and every check passed. 1: refused or a check failed.
 
@@ -34,7 +43,9 @@ The build's application zip. Default: the single orbis-*.en-US.win64.zip in <obj
 (%USERPROFILE%\orbis_desktop_src\obj-orbis\dist).
 
 .PARAMETER WorkDir
-Folder for the stage, the unpack check and the logs. Default: %USERPROFILE%\orbis_desktop_src\msix-work
+Folder for the stage, the unpack check and the logs. Default: %USERPROFILE%\orbis_desktop_src\msix-work, or
+...\msix-work-unsigned-test with -AllowUnsignedInstall, so that a test build never overwrites the Store build's
+folder.
 
 .PARAMETER Output
 The .msix to write. Default: %USERPROFILE%\orbis_desktop_src\msix\<identityName>_<version>_x64.msix
@@ -48,7 +59,12 @@ Skip staging and mach; only unpack and check the existing -Output.
 .PARAMETER AllowUnsignedInstall
 For a local test only, never for the Store: passes --unsigned to mach, which appends Microsoft's
 "unsigned package" OID to the publisher, so that an administrator can install it with
-Add-AppxPackage -AllowUnsigned (docs\MSIX.md, "Local install test"). Output name ends in _unsigned-test.msix.
+Add-AppxPackage -AllowUnsigned (docs\MSIX.md, "Local install test"). Output name ends in _unsigned-test.msix;
+the default work folder is msix-work-unsigned-test.
+
+.PARAMETER RequireStoreIdentity
+Refuse (exit 1) while identityName, publisher or publisherDisplayName still holds a TODO-STORE placeholder.
+Use it for every build meant for upload.
 
 .EXAMPLE
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1
@@ -61,7 +77,8 @@ param(
     [string]$Output = '',
     [string]$Config = '',
     [switch]$CheckOnly,
-    [switch]$AllowUnsignedInstall
+    [switch]$AllowUnsignedInstall,
+    [switch]$RequireStoreIdentity
 )
 
 Set-StrictMode -Version 2.0
@@ -71,7 +88,10 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $scriptDir)).TrimEnd('\')
 $src = Join-Path $env:USERPROFILE 'orbis_desktop_src'
 if (-not $Checkout) { $Checkout = Join-Path $src 'firefox' }
-if (-not $WorkDir) { $WorkDir = Join-Path $src 'msix-work' }
+if (-not $WorkDir) {
+    if ($AllowUnsignedInstall) { $WorkDir = Join-Path $src 'msix-work-unsigned-test' }
+    else { $WorkDir = Join-Path $src 'msix-work' }
+}
 if (-not $Config) { $Config = Join-Path $repoRoot 'packaging\msix-config.json' }
 $Marker = '.orbis-make-msix'
 $failures = New-Object System.Collections.ArrayList
@@ -160,6 +180,19 @@ try {
     foreach ($k in 'identityName', 'publisher', 'publisherDisplayName', 'displayName', 'channel', 'arch',
                    'orbisRevision', 'capabilities', 'assets') {
         if ($null -eq $cfg.$k) { throw "$Config has no '$k'" }
+    }
+    $placeholders = @('identityName', 'publisher', 'publisherDisplayName' | Where-Object { $cfg.$_ -match 'TODO' })
+    if ($placeholders.Count -gt 0) {
+        $list = ($placeholders | ForEach-Object { "$_='$($cfg.$_)'" }) -join ', '
+        if ($RequireStoreIdentity) {
+            throw "REFUSED: -RequireStoreIdentity, but the config still has placeholders: $list (docs\MSIX.md)"
+        }
+        $bar = '!' * 78
+        Write-Warning $bar
+        Write-Warning 'STORE IDENTITY IS STILL A PLACEHOLDER. THIS PACKAGE CANNOT BE UPLOADED TO THE STORE.'
+        Write-Warning "  $list"
+        Write-Warning '  Fill in the Partner Center values (docs\MSIX.md) and build with -RequireStoreIdentity.'
+        Write-Warning $bar
     }
     $displayNoSpaces = $cfg.displayName -replace ' ', ''
     # mach builds the identity as <vendor>.<identity-name without spaces>, and uses --identity-name as the tile
@@ -328,12 +361,22 @@ try {
         if ($mfText -match $bad) { Add-Failure "AppxManifest.xml contains '$bad'" }
     }
 
-    # Logo assets: every file of the config's assets folder, byte-identical.
-    foreach ($a in Get-ChildItem -LiteralPath $assetsDir -File) {
+    # Logo assets, two-way: every file of the config's assets folder, byte-identical, and nothing else.
+    $wantAssets = @(Get-ChildItem -LiteralPath $assetsDir -File)
+    foreach ($a in $wantAssets) {
         $p = Join-Path $pkg ('Assets\' + $a.Name)
         if (-not (Test-Path -LiteralPath $p)) { Add-Failure "Assets\$($a.Name) missing" }
         elseif ((Get-Sha256 $p) -ne (Get-Sha256 $a.FullName)) { Add-Failure "Assets\$($a.Name) differs from $($cfg.assets)" }
     }
+    $wantNames = @($wantAssets | ForEach-Object { $_.Name })
+    $pkgAssets = @(Get-ChildItem -LiteralPath (Join-Path $pkg 'Assets') -Recurse -File)
+    foreach ($a in $pkgAssets) {
+        $rel = $a.FullName.Substring($pkg.Length + 1)
+        if ($rel -ne ('Assets\' + $a.Name) -or $wantNames -notcontains $a.Name) {
+            Add-Failure "$rel is in the package but not in $($cfg.assets)"
+        }
+    }
+    Write-Host ("  Assets: {0} in the package, {1} in {2}" -f $pkgAssets.Count, $wantAssets.Count, $cfg.assets)
 
     # Policy files in the install folder, identical to orbis-dist.
     $instDir = Join-Path $pkg $instRel
@@ -354,9 +397,32 @@ try {
         Where-Object { $_.Length -lt 1MB } | Select-String -SimpleMatch 'mozilla-MSIX' -List)
     foreach ($h in $hits) { Add-Failure "'mozilla-MSIX' in $($h.Path.Substring($pkg.Length + 1))" }
 
-    $files = @(Get-ChildItem -LiteralPath $pkg -Recurse -File).Count
-    Write-Host "  $files files in the package; AppxManifest.xml copied to $work"
+    # Report only, never a failure: Mozilla or Firefox in file names and in version resources.
+    $allFiles = @(Get-ChildItem -LiteralPath $pkg -Recurse -File)
+    $nameHits = @($allFiles | ForEach-Object { $_.FullName.Substring($pkg.Length + 1) } |
+        Where-Object { $_ -match 'mozilla|firefox' })
+    Write-Host ("  REPORT: {0} file name(s) contain Mozilla or Firefox" -f $nameHits.Count)
+    foreach ($n in $nameHits) { Write-Host "    $n" }
+    $verFields = 'CompanyName', 'ProductName', 'FileDescription', 'LegalCopyright', 'LegalTrademarks',
+                 'InternalName', 'OriginalFilename', 'Comments'
+    $verHits = New-Object System.Collections.ArrayList
+    foreach ($b in @($allFiles | Where-Object { $_.Extension -eq '.exe' -or $_.Extension -eq '.dll' })) {
+        $vi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($b.FullName)
+        $found = @($verFields | Where-Object { $vi.$_ -match 'mozilla|firefox' } |
+            ForEach-Object { "{0}='{1}'" -f $_, $vi.$_ })
+        if ($found.Count -gt 0) {
+            [void]$verHits.Add(('{0}: {1}' -f $b.FullName.Substring($pkg.Length + 1), ($found -join '; ')))
+        }
+    }
+    Write-Host ("  REPORT: {0} binaries with Mozilla or Firefox in the version resource" -f $verHits.Count)
+    foreach ($v in $verHits) { Write-Host "    $v" }
+
+    Write-Host "  $($allFiles.Count) files in the package; AppxManifest.xml copied to $work"
     if ($failures.Count -gt 0) { throw ("{0} check(s) failed" -f $failures.Count) }
+    $hash = Get-Sha256 $out
+    [System.IO.File]::WriteAllText($out + '.sha256', ("{0} *{1}`r`n" -f $hash, (Split-Path -Leaf $out)))
+    Write-Host "SHA-256: $hash (also in $out.sha256)"
+    if ($placeholders.Count -gt 0) { Write-Warning 'Built with TODO-STORE placeholders: not for upload.' }
     Write-Host "OK: $out"
     exit 0
 } catch {
