@@ -26,6 +26,39 @@ the tag points at the pinned commit.
 | 1 | `STALE`: the pin is Mozilla's latest version but is still the `_BUILD` tag, or the `_RELEASE` tag is a different commit. Switch the pin to the `_RELEASE` tag and its commit |
 | 2 | The check failed (network, git, feed format, pin file). Treat as a failure too |
 
+On exit code 1 the script also prints Mozilla's release date of the latest version (from
+`firefox_history_major_releases.json`, or `firefox_history_stability_releases.json` for a dot release, or
+`LAST_RELEASE_DATE` if the version is not in the history yet), the Orbis deadline (release date + 3 days) and
+how many major versions the pin is behind. At 2 majors behind it warns: Microsoft Store policy 10.2.1 allows at
+most 2. `-ReportFile FILE` writes the result as JSON.
+
+## The daily check on GitHub
+
+`.github/workflows/firefox-currency.yml` runs the check every day at 06:17 UTC, and on demand (Actions tab, "Firefox
+currency", "Run workflow"). It runs on `windows-latest` with Windows PowerShell 5.1 (`shell: powershell`), because
+the scripts use Windows paths. It uses only the workflow's `GITHUB_TOKEN` (`contents: read`, `issues: write`) and
+the GitHub CLI that comes with the runner.
+
+| Check result | What the workflow does |
+|---|---|
+| Behind or stale (exit 1) | Opens the issue **Firefox pin is out of date** with the label `firefox-update` (creates the label if needed). If that issue is already open, it replaces the body and adds one comment, but only when something changed (new version, deadline passed). The issue lists the new version, Mozilla's release date, the 3-day deadline and the number of majors behind, with a Store 10.2.1 warning at 2 or more. The job stays green, with a warning |
+| Current (exit 0) | Closes the open **Firefox pin is out of date** issue with a comment |
+| Check failed (exit 2) | The job fails (red, with an error note). No issue is opened, changed or closed |
+
+The issue is matched by its exact title and label. Other issues with the `firefox-update` label are never touched.
+Do not edit the issue body: the next run overwrites it. Comment instead.
+
+GitHub runs scheduled workflows only from the default branch, and turns them off in a public repository after 60
+days without any commit. If that happens, the Actions tab shows a button to turn the workflow back on.
+
+Test the check and the issue text offline (local feed files, a throw-away git repository, no GitHub):
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-firefox-currency.ps1
+```
+
+`scripts\sync-currency-issue.ps1 -ReportFile FILE -DryRun` prints the issue text for a report without calling GitHub.
+
 ## Move the pin to a new release
 
 1. Find the tag and its commit:

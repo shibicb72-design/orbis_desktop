@@ -1,0 +1,64 @@
+# Daily check that the pinned Firefox (upstream/firefox.json) is Mozilla's latest release.
+# Behind or stale: open or update the issue "Firefox pin is out of date" (label firefox-update).
+# Current: close that issue. Check error: the job fails and no issue is touched.
+# See docs/UPDATING.md.
+
+name: Firefox currency
+
+on:
+  schedule:
+    - cron: '17 6 * * *'   # daily, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: firefox-currency
+  cancel-in-progress: false
+
+jobs:
+  currency:
+    # The scripts target Windows PowerShell 5.1 and use Windows paths (upstream\firefox.json),
+    # so this runs on Windows with shell: powershell, not pwsh on Linux.
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the pin against Mozilla's latest release
+        id: check
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'   # judge the script by its exit code only
+          $report = Join-Path $env:RUNNER_TEMP 'firefox-currency.json'
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-firefox-currency.ps1 -ReportFile $report
+          $code = $LASTEXITCODE
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "code=$code" -Encoding ascii
+          if ($code -eq 0) { exit 0 }
+          if ($code -eq 1) {
+            $r = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+            Write-Output ("::warning title=Firefox pin {0}::{1}" -f $r.status, ($r.message -replace '%', '%25'))
+            if ($r.majorsBehind -ge 2) {
+              Write-Output ("::warning title=Store policy 10.2.1::The pin is {0} major versions behind Firefox {1}; the Store allows at most 2." -f $r.majorsBehind, $r.latestVersion)
+            }
+            exit 0
+          }
+          Write-Output "::error title=Firefox currency check failed::The check could not run (exit $code). No issue was changed. See the log above."
+          exit 1
+
+      - name: Open, update or close the firefox-update issue
+        if: steps.check.outputs.code == '0' || steps.check.outputs.code == '1'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Continue'   # judge the script by its exit code only
+          $report = Join-Path $env:RUNNER_TEMP 'firefox-currency.json'
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sync-currency-issue.ps1 -ReportFile $report -Repository $env:GITHUB_REPOSITORY -RunUrl $env:RUN_URL
+          exit $LASTEXITCODE
