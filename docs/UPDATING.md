@@ -48,7 +48,14 @@ the tag points at the pinned commit.
    repository. The script checks the tag on the remote **before** downloading, fetches only that tag with depth 1,
    checks the fetched commit again, and only then checks it out. Any mismatch prints `REFUSED` and exits 1.
    Running it again on the same folder is safe.
-5. Open a version bump PR that changes `upstream/firefox.json` only, plus whatever the later checks demand.
+5. Check that the source patches still apply (writes nothing):
+
+   ```
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-patches.ps1 -Check
+   ```
+
+   If a patch no longer applies, rebase it by hand on the new source (see `docs/PATCHES.md`).
+6. Open a version bump PR that changes `upstream/firefox.json` only, plus whatever the later checks demand.
 
 To build a release candidate before release day, pin `FIREFOX_<n>_BUILD<k>` the same way. On release day, check
 that `FIREFOX_<n>_RELEASE` is the same commit, then switch the tag in the pin.
