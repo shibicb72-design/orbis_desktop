@@ -1,0 +1,5 @@
+# Store text with LF in the repository; LICENSE stays byte-identical to
+# https://www.mozilla.org/media/MPL/2.0/index.txt
+* text=auto
+LICENSE text eol=lf
+*.ps1 text eol=crlf

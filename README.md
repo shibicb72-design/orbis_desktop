@@ -1,0 +1,75 @@
+# Orbis Desktop
+
+Orbis Desktop is a private web browser for Windows. It is the desktop sibling of Orbis for Android.
+
+## What it is
+
+- **A rebranded Firefox.** Orbis Desktop is built from Mozilla's Firefox source code, unchanged except for Orbis's
+  own name, icons and privacy settings.
+- **Not affiliated with Mozilla.** Orbis Desktop is not made by, endorsed by, or affiliated with Mozilla.
+- **No Firefox trademarks.** The browser does not use the Firefox or Mozilla names or logos. The only mention is the
+  truthful attribution "based on Mozilla's Firefox source code". Firefox and Mozilla are trademarks of the Mozilla
+  Foundation.
+- **Microsoft Store only.** Orbis Desktop is distributed and updated only through the Microsoft Store. There is no
+  other download and no built-in updater.
+- **No servers, accounts, sync or analytics.** Orbis's developer runs no servers and receives nothing. There are no
+  Orbis accounts, no sync, no telemetry and no analytics.
+- **English only.**
+
+## What it does
+
+- Blocks ads and trackers with uBlock Origin, installed automatically from addons.mozilla.org on first run.
+- Strict tracking protection and per-site cookie isolation on every tab.
+- HTTPS-only mode on by default.
+- No telemetry, no studies, no crash reports, no accounts, no sync, no sponsored content, no AI chat.
+
+TODO (Safe Browsing decision): one honest sentence about malware and phishing protection.
+
+## What leaves your PC
+
+A full list will be in `PRIVACY_POLICY.md` (TODO). In short: the sites you visit, your chosen search engine,
+addons.mozilla.org and filter-list publishers (uBlock Origin), Mozilla (security lists and translation models), and
+the Microsoft Store (updates). Nothing goes to Orbis's developer.
+
+## How this repository works
+
+This repository does **not** contain Firefox. It contains a small overlay that is applied to an exact Firefox
+release. Paths marked "planned" do not exist yet.
+
+| Path | What |
+|---|---|
+| `upstream/firefox.json` | The Firefox release tag and commit that Orbis is built from |
+| `scripts/` | Fetch the pinned Firefox source, check that it is current; later: apply the overlay, build, package, test |
+| `overlay/` | (planned) Branding, `policies.json`, `orbis.cfg`: files copied into the Firefox source tree |
+| `patches/` | (planned) Changes to Mozilla's own files, kept as few as possible |
+| `mozconfig` | (planned) Build options |
+| `docs/` | Update guide; later: settings rationale, build guide, network audit, Store materials |
+| `tests/` | (planned) Smoke tests and the network allow-list |
+
+Every difference between Orbis and Firefox is in this repository.
+
+## Building
+
+TODO: `docs/BUILD.md`. The build runs on Windows with Mozilla's MozillaBuild environment and needs about 40 GB of free
+disk space. The Firefox source and all build output live outside this repository (by default under
+`%USERPROFILE%\orbis_desktop_src\`).
+
+## Updates and security
+
+Firefox ships every two weeks, plus unplanned security fixes. Orbis follows each release.
+
+TODO (promise wording decision): the exact update promise.
+
+`scripts/check-firefox-currency.ps1` fails when the pinned Firefox version is behind Mozilla's latest release. See
+`docs/UPDATING.md`.
+
+## Source code and licences
+
+- Orbis's own files: Mozilla Public License 2.0, see `LICENSE`.
+- Firefox source: https://github.com/mozilla-firefox/firefox at the tag and commit named in `upstream/firefox.json`,
+  MPL-2.0, with third-party components listed in the browser at `about:license`.
+- uBlock Origin is GPL-3.0. Orbis does not include it; your browser downloads it from addons.mozilla.org.
+
+## Reporting a security problem
+
+TODO: contact route (to be chosen by the owner).

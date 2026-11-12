@@ -1,0 +1,47 @@
+# The Firefox checkout and build output belong outside this repository
+# (default: %USERPROFILE%\orbis_desktop_src\). These entries catch copies
+# that end up inside it by mistake.
+/firefox/
+/orbis_desktop_src/
+/src/
+obj-*/
+objdir*/
+/obj/
+/logs/
+*.log
+
+# MSIX and other package output
+*.msix
+*.msixbundle
+*.msixupload
+*.appx
+*.appxbundle
+*.appxupload
+*.zip
+*.xpi
+
+# Secrets: signing certificates, keys, tokens, Store and cloud credentials
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
+*.cer
+*.crt
+.env
+.env.*
+*.secret
+*.secrets
+*-api-key*
+*_api_key*
+*apikey*
+secrets/
+credentials*.json
+msstore*.json
+
+# Editor and OS noise
+.vs/
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini
