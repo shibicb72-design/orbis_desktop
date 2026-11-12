@@ -1,0 +1,11 @@
+{
+  "identityName": "TODO-STORE.Orbis",
+  "publisher": "CN=TODO-STORE",
+  "publisherDisplayName": "TODO-STORE",
+  "displayName": "Orbis",
+  "channel": "unofficial",
+  "arch": "x86_64",
+  "orbisRevision": 0,
+  "capabilities": ["runFullTrust"],
+  "assets": "overlay/browser/branding/orbis/msix/Assets"
+}

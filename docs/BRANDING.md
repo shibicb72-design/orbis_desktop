@@ -104,13 +104,16 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   and an add-on ID is an internal identifier, not a name a user sees (rule 5, like the built-in
   `newtab@mozilla.org`). It becomes an item only if Orbis ever ships language packs: then
   `mach repackage msix` would name them `langpack-<locale>@<app name>.mozilla.org.xpi`.
-- **Store blocker for the MSIX step: Mozilla's MSIX `distribution.ini`.** `mach repackage msix` always adds
-  `browser/installer/windows/msix/distribution/distribution.ini` (`id=mozilla-MSIX`, `about=Windows MSIX package`,
-  "Author: Mozilla") before any `--distribution-dir`, and skips later files with the same name. `aboutDialog.js`
-  shows `distribution.about` and `distribution.id` in the About dialog when both are set, so an MSIX built this
-  way would show "Windows MSIX package" and "mozilla-MSIX - 1.0" (read from the source; no MSIX built yet). Fix
-  with the MSIX PR: a patch to that file (Orbis id and about text, or no `[Global]` about) or an Orbis copy of
-  the template. See `docs/BUILD.md`.
+- **Mozilla's MSIX `distribution.ini`: fixed by `patches/0004-msix-no-mozilla-distribution.patch`.**
+  `mach repackage msix` always adds `browser/installer/windows/msix/distribution/distribution.ini`
+  (`id=mozilla-MSIX`, `about=Windows MSIX package`, "Author: Mozilla") before any `--distribution-dir`, and skips
+  later files with the same name; the About dialog would show "Windows MSIX package" and "mozilla-MSIX - 1.0".
+  Patch 0004 deletes the template file, so the Orbis MSIX has no `distribution.ini` (checked by
+  `scripts/make-msix.ps1` in the unpacked package). See `docs/MSIX.md`.
+- **MSIX identity: placeholders until the Store account exists.** `packaging/msix-config.json` has `TODO-STORE`
+  for the package identity name, publisher and publisher display name (`docs/MSIX.md`). The manifest's
+  background-task class ID is `Mozilla.MsixComServer.BackgroundTaskHost` from the build: an internal identifier
+  (rule 5), not shown to users.
 - **Still shared with Firefox, by design:** the enterprise-policy registry key
   `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (and its HKCU twin): Firefox group policies set by an administrator also
   apply to Orbis. Other shared registry keys are listed in `docs/PATCHES.md`, "Still shared with Firefox".

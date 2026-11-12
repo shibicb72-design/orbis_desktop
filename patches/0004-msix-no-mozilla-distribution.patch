@@ -1,0 +1,26 @@
+Orbis: no Mozilla partner distribution in the MSIX.
+
+mach repackage msix always adds this template's distribution.ini (id=mozilla-MSIX, about=Windows MSIX
+package, "Author: Mozilla") before any other distribution folder, and skips later files with the same name.
+The About dialog would then show "Windows MSIX package" and "mozilla-MSIX - 1.0". Orbis ships no
+distribution.ini at all: its distribution folder holds only policies.json. The file is used only by
+msix.py (and a UITour test); no build step reads it. See docs/PATCHES.md and docs/MSIX.md.
+
+diff --git a/browser/installer/windows/msix/distribution/distribution.ini b/browser/installer/windows/msix/distribution/distribution.ini
+deleted file mode 100644
+index b39f8df795c569382bf4c3228b60ca3cd6cb74e4..0000000000000000000000000000000000000000
+--- a/browser/installer/windows/msix/distribution/distribution.ini
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# Partner Distribution Configuration File
+-# Author: Mozilla
+-# Date: 2021-07-19
+-
+-[Global]
+-id=mozilla-MSIX
+-version=1.0
+-about=Windows MSIX package
+-
+-[Preferences]
+-intl.locale.requested=""
+-intl.multilingual.enabled=true
