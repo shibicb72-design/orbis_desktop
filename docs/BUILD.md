@@ -164,6 +164,9 @@ python -I scripts\verify-build.py consent $inst $out\accept  accept   # first-ru
 python -I scripts\verify-build.py consent $inst $out\decline decline  # first-run screen, declined: no uBO, no AMO
 python -I scripts\verify-build.py consent $inst $out\accept-de  accept  --system-locale de-DE   # same, on a
 python -I scripts\verify-build.py consent $inst $out\decline-de decline --system-locale de-DE   # German Windows
+python -I scripts\verify-build.py consent $inst $out\close   close    # left unanswered: back at next start
+python -I scripts\verify-build.py consent $inst $out\close-de close --system-locale de-DE
+python -I scripts\verify-build.py consent $inst $out\early   early    # "Start browsing" before Firefox's Add
 python -I scripts\verify-build.py second  $inst $out\second <profile folder printed by the consent accept phase>
 python -I scripts\verify-build.py ui      $inst $out\ui       # window titles, new tab, About dialog
 ```
@@ -179,10 +182,16 @@ The script's header lists every output file. What to compare:
 - `idle`: in `checks-idle.json` every pref has the value and lock state in `docs/SETTINGS.md`, `policiesStatus`
   equals `STATUS_ACTIVE` and `about:policies` shows no errors. Nobody answers the first-run screen in this phase,
   so `ubo` must be null: no silent install.
-- `consent`: `consent-accept.json` and `consent-decline.json` end with `"result": "PASS"`; the `pass` map names
-  each check (screen shown with the box checked; no uBlock Origin, install or `addons.mozilla.org` lookup before
-  the answer; accept: uBlock Origin active with exactly the 13 `3rdparty` lists; decline: no uBlock Origin and no
-  `addons.mozilla.org` lookup at all; the choice recorded; not asked again at the second start). Any host ending in
+- `consent`: every `consent-<choice>.json` ends with `"result": "PASS"`. The `pass` map names each check:
+  - all choices: the screen is shown with the box checked, and there is no uBlock Origin, install or
+    `addons.mozilla.org` lookup before the answer;
+  - accept: uBlock Origin is active with exactly the 13 `3rdparty` lists;
+  - decline: the warning about phishing and malware protection shows; there is no uBlock Origin and no
+    `addons.mozilla.org` lookup at all;
+  - close: the screen is left and Orbis quit without an answer, no choice is recorded, and the screen is back at
+    the next start (then declined there);
+  - early: "Start browsing" before Firefox's Add prompt leaves no uBlock Origin; the choice is `accepted`;
+  - all choices: the choice is recorded, and two later starts do not show the screen. Any host ending in
   `addons.mozilla.org` counts. The `--system-locale de-DE` runs set `intl.multilingual.aboutWelcome.systemLocaleOverride`
   in the test profile, so `about:welcome` sees a Windows language that differs from Orbis's; without the
   `languageMismatchEnabled` lock it would then ask `services.addons.mozilla.org` for language packs before the answer.

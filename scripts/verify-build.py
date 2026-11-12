@@ -21,13 +21,17 @@ Phases:
            loses nothing) and TCP sampling of the started process tree (f-tcp.json); then prefs, policies,
            about:policies and uBlock Origin (checks-idle.json, aboutpolicies-idle.json/.png). Nobody answers
            the first-run consent screen here, so uBlock Origin must not be installed.
-  consent  First-run uBlock Origin consent screen (EXTRA = accept or decline). New profile, headless, with
-           the same DNS log. Before the answer: about:welcome shows the screen with the checkbox on, and there
-           is no uBlock Origin, no add-on install and no addons.mozilla.org lookup. accept: Continue with the
-           checkbox on, accept Firefox's permission prompt; uBlock Origin is installed and its selected lists
-           are exactly the 13 lists in policies.json "3rdparty". decline: uncheck, Continue; after 60 seconds
-           there is no uBlock Origin, no install and no addons.mozilla.org lookup in the whole DNS log. Both:
-           the choice pref is recorded, and a second start of the same profile does not show the screen again.
+  consent  First-run uBlock Origin consent screen (EXTRA = accept, decline, close or early). New profile,
+           headless, with the same DNS log. Before the answer: about:welcome shows the screen with the checkbox
+           on, and there is no uBlock Origin, no add-on install and no addons.mozilla.org lookup. accept:
+           Continue with the checkbox on, accept Firefox's permission prompt; uBlock Origin is installed and its
+           selected lists are exactly the 13 lists in policies.json "3rdparty". decline: uncheck (the warning
+           about phishing and malware protection must show), Continue; after 60 seconds there is no uBlock
+           Origin, no install and no addons.mozilla.org lookup in the whole DNS log. close: leave the screen
+           and quit without answering; the next start must show the screen again, where it is declined. early:
+           Continue with the checkbox on, then "Start browsing" before Firefox's Add prompt is answered; no
+           uBlock Origin, choice "accepted". All: the choice pref is recorded, and two later starts of the same
+           profile do not show the screen again.
            Writes consent-<choice>.json (with a "pass" map and "PASS"/"FAIL"), checks-consent-<choice>.json,
            consent-<choice>-screen.png and the DNS log. "addons.mozilla.org lookup" means any host name ending
            in addons.mozilla.org (also services. and versioncheck-bg.). With --system-locale (for example
@@ -76,7 +80,7 @@ def parse_args():
     ap.add_argument("install_dir")
     ap.add_argument("out_dir")
     ap.add_argument("extra", nargs="?",
-                    help="consent: accept or decline; second: the profile folder; quit: the Marionette port")
+                    help="consent: accept, decline, close or early; second: the profile folder; quit: the Marionette port")
     ap.add_argument("--source", default=os.path.join(home, "orbis_desktop_src", "firefox"))
     ap.add_argument("--profiles", default=os.path.join(home, "orbis_desktop_src", "test-profiles"))
     ap.add_argument("--system-locale", default=None,
@@ -546,43 +550,84 @@ def switch_to_welcome(m):
     return False
 
 
+CONSENT_CHOICES = ("accept", "decline", "close", "early")
+
+
+def welcome_open(m):
+    """Waits for the about:welcome tab; returns the last add-on state."""
+    st = wait_for(m, "about:welcome open", lambda s: any(t.startswith("about:welcome") for t in s["tabs"]), 60)
+    time.sleep(5)  # the page renders its screen after it has loaded
+    return st
+
+
+def check_screen(m, res, ok, tag):
+    """Records the unanswered screen: shown, checked by default, no uBlock Origin, no AMO lookup yet."""
+    b = res[tag + "Before"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+    res[tag + "AmoLookupsBefore"] = amo_lookups(dns_hosts(OUT))
+    if not switch_to_welcome(m):
+        raise RuntimeError("no about:welcome tab: %r" % b["tabs"])
+    box = m.find_element("css selector", "#orbis-install-ubo")
+    res[tag + "ScreenText"] = m.execute_script("return document.body.innerText")
+    ok[tag + "ScreenShown"] = "Install uBlock Origin ad blocker" in res[tag + "ScreenText"]
+    ok[tag + "CheckedByDefault"] = box.is_selected() is True
+    ok[tag + "NoUboBeforeConsent"] = b["ubo"] is None and not b["installs"] and b["choice"] is None
+    ok[tag + "NoAmoBeforeConsent"] = res[tag + "AmoLookupsBefore"] == 0
+    return box
+
+
+def decline_on_screen(m, res, ok, box, shot):
+    """Unchecks the box, checks the warning, saves a screenshot and clicks Continue."""
+    box.click()
+    time.sleep(1)
+    res["screenTextUnchecked"] = text = m.execute_script("return document.body.innerText")
+    ok["uncheckedByClick"] = box.is_selected() is False
+    ok["warnsNoPhishingMalwareProtection"] = all(
+        s in text for s in ("phishing and malware", "Google Safe Browsing", "Strict tracking protection stays on",
+                            "Add-ons and themes"))
+    with open(os.path.join(OUT, shot), "wb") as f:
+        f.write(m.screenshot(format="binary"))
+    m.find_element("css selector", "button.primary").click()
+    log("clicked Continue (box unchecked)")
+
+
 def phase_consent():
+    """accept, decline: answer on the first start. close: leave the screen and quit without answering, then the
+    screen must come back; decline it on that second start. early: Continue with the box checked, then "Start
+    browsing" at once, before Firefox's Add prompt is answered. All: a later start must not show the screen."""
     choice = ARGS.extra
-    if choice not in ("accept", "decline"):
-        sys.exit("consent: give accept or decline as EXTRA")
+    if choice not in CONSENT_CHOICES:
+        sys.exit("consent: give one of %s as EXTRA" % ", ".join(CONSENT_CHOICES))
     prof = new_profile("consent-" + choice)
     res = {"choice": choice, "profile": prof, "systemLocale": ARGS.system_locale, "pass": {}}
     prefs = {LOCALE_OVERRIDE_PREF: ARGS.system_locale} if ARGS.system_locale else None
     ok = res["pass"]
+
+    def start(logname):
+        return launch(prof, 28284, headless=True, extra_prefs=prefs,
+                      extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5",
+                                 "MOZ_LOG_FILE": os.path.join(OUT, logname)})
+
     proc = m = None
     try:
-        proc = launch(prof, 28284, headless=True,
-                      extra_env={"MOZ_LOG": "timestamp,sync,nsHostResolver:5",
-                                 "MOZ_LOG_FILE": os.path.join(OUT, "dns.log")}, extra_prefs=prefs)
+        proc = start("dns.log")
         m = connect(28284)
-        st = wait_for(m, "about:welcome open", lambda s: any(t.startswith("about:welcome") for t in s["tabs"]), 60)
-        time.sleep(5)  # the page renders its screen after it has loaded
-        res["before"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
-        res["amoLookupsBefore"] = amo_lookups(dns_hosts(OUT))
-        if not switch_to_welcome(m):
-            raise RuntimeError("no about:welcome tab: %r" % st["tabs"])
-        box = m.find_element("css selector", "#orbis-install-ubo")
-        res["screenText"] = m.execute_script("return document.body.innerText")
-        res["checkboxCheckedAtStart"] = box.is_selected()
-        b = res["before"]
-        ok["screenShown"] = "Install uBlock Origin ad blocker" in res["screenText"]
-        ok["checkedByDefault"] = res["checkboxCheckedAtStart"] is True
-        ok["noUboBeforeConsent"] = b["ubo"] is None and not b["installs"] and b["choice"] is None
-        ok["noAmoBeforeConsent"] = res["amoLookupsBefore"] == 0
+        welcome_open(m)
+        box = check_screen(m, res, ok, "first")
         if choice == "decline":
-            box.click()
-            time.sleep(1)
-            res["checkboxCheckedAfterClick"] = box.is_selected()
-            res["screenTextUnchecked"] = m.execute_script("return document.body.innerText")
-        with open(os.path.join(OUT, "consent-%s-screen.png" % choice), "wb") as f:
-            f.write(m.screenshot(format="binary"))
-        m.find_element("css selector", "button.primary").click()
-        log("clicked Continue")
+            decline_on_screen(m, res, ok, box, "consent-decline-screen.png")
+        elif choice == "close":
+            with open(os.path.join(OUT, "consent-close-screen.png"), "wb") as f:
+                f.write(m.screenshot(format="binary"))
+            m.navigate("about:blank")  # the user leaves the screen without answering ...
+            time.sleep(2)
+            res["afterLeaving"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["noChoiceAfterLeaving"] = res["afterLeaving"]["choice"] is None
+        else:
+            with open(os.path.join(OUT, "consent-%s-screen.png" % choice), "wb") as f:
+                f.write(m.screenshot(format="binary"))
+            m.find_element("css selector", "button.primary").click()
+            log("clicked Continue (box checked)")
+
         if choice == "accept":
             st = wait_for(m, "permission prompt", lambda s: s["permissionPrompt"] or s["ubo"], 90)
             res["permissionPrompt"] = st["permissionPrompt"]
@@ -607,33 +652,64 @@ def phase_consent():
             ok["uboInstalled"] = bool(res["after"]["ubo"] and res["after"]["ubo"]["isActive"])
             ok["lists13"] = len(want) == 13 and sorted(res["selectedFilterLists"] or []) == sorted(want)
             ok["choiceRecorded"] = res["after"]["choice"] == "accepted"
-        else:
+        elif choice == "early":
+            # "Start browsing" on the second screen at once, without answering Firefox's prompt.
+            time.sleep(1)
+            if not switch_to_welcome(m):
+                raise RuntimeError("the second screen is gone")
+            res["secondScreenText"] = m.execute_script("return document.body.innerText")
+            m.find_element("css selector", "button.primary").click()
+            log("clicked Start browsing before the prompt was answered")
+            time.sleep(30)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["noUboWithoutAdd"] = a["ubo"] is None and not a["installs"] and a["permissionPrompt"] is None
+            ok["choiceRecorded"] = a["choice"] == "accepted"
+            ok["finishedOnHome"] = a["tabs"] == ["about:home"]
+        elif choice == "decline":
             time.sleep(60)
-            res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
             run_checks(m, "consent-decline")
-            a = res["after"]
-            ok["uncheckedByClick"] = res["checkboxCheckedAfterClick"] is False
             ok["noUbo"] = a["ubo"] is None and not a["installs"] and a["permissionPrompt"] is None
             ok["choiceRecorded"] = a["choice"] == "declined"
             ok["finishedOnHome"] = a["tabs"] == ["about:home"]
     finally:
         stop_browser(proc, m)
+
+    if choice == "close":
+        # ... and starts Orbis again: the screen must come back. Answer it this time (decline).
+        proc = m = None
+        try:
+            proc = start("dns.log.start2")
+            m = connect(28284)
+            st = welcome_open(m)
+            ok["askedAgainAfterClose"] = any(t.startswith("about:welcome") for t in st["tabs"])
+            box = check_screen(m, res, ok, "again")
+            decline_on_screen(m, res, ok, box, "consent-close-again-screen.png")
+            time.sleep(20)
+            a = res["after"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
+            ok["noUbo"] = a["ubo"] is None and not a["installs"]
+            ok["choiceRecorded"] = a["choice"] == "declined"
+        finally:
+            stop_browser(proc, m)
+
     hosts = dns_hosts(OUT)
     res["dnsHosts"] = dict(sorted(hosts.items()))
-    if choice == "decline":
-        ok["noAmoLookup"] = amo_lookups(hosts) == 0
-    else:
+    if choice == "accept":
         ok["amoLookupAfterConsent"] = hosts.get(AMO_HOST, 0) > 0
-    # Second start of the same profile: the screen must not come back.
-    proc = m = None
-    try:
-        proc = launch(prof, 28284, headless=True)
-        m = connect(28284)
-        time.sleep(15)
-        res["secondStart"] = chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF])
-        ok["notAskedAgain"] = not any(t.startswith("about:welcome") for t in res["secondStart"]["tabs"])
-    finally:
-        stop_browser(proc, m)
+    elif choice in ("decline", "close"):
+        ok["noAmoLookup"] = amo_lookups(hosts) == 0
+    # Later starts of the same profile: after an answer the screen must never come back.
+    res["laterStarts"] = []
+    for _ in range(2):
+        proc = m = None
+        try:
+            proc = launch(prof, 28284, headless=True)
+            m = connect(28284)
+            time.sleep(15)
+            res["laterStarts"].append(chrome(m, ADDON_STATE_JS, [UBO, CONSENT_PREF]))
+        finally:
+            stop_browser(proc, m)
+    ok["notAskedAgain"] = not any(t.startswith("about:welcome") for s in res["laterStarts"] for t in s["tabs"])
     res["result"] = "PASS" if ok and all(ok.values()) else "FAIL"
     dump("consent-%s.json" % choice, res)
     log(json.dumps({k: res[k] for k in ("pass", "result", "profile")}, indent=1))

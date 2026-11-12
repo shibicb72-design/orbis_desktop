@@ -89,11 +89,19 @@ CONSENT_SOURCE = (
      ("featureConfig.languageMismatchEnabled",)),
     ("browser/components/aboutwelcome/actors/AboutWelcomeParent.sys.mjs",
      ('"trailhead.firstrun.didHandleCampaignAction"',)),
+    ("browser/components/BrowserContentHandler.sys.mjs",
+     # Re-asking relies on: an empty saved milestone means a new profile, which opens the welcome page.
+     ("return savedmstone ? OVERRIDE_NEW_MSTONE : OVERRIDE_NEW_PROFILE", '"startup.homepage_welcome_url"',
+      '"browser.startup.homepage_override.mstone"')),
     ("toolkit/components/nimbus/FeatureManifest.yaml",
      ("fallbackPref: browser.aboutwelcome.screens",
       "fallbackPref: intl.multilingual.aboutWelcome.languageMismatchEnabled")),
 )
 SMA_FILE = "toolkit/components/messaging-system/lib/SpecialMessageActions.sys.mjs"
+# Orbis's own prefs: "orbis.*", and the consent choice, which Firefox's SET_PREF stores under its own prefix.
+OWN_PREFIXES = ("orbis.", "messaging-system-action.orbis.")
+CONSENT_CHOICE_PREF = "orbis.ubo.consent"
+MSTONE_PREF = "browser.startup.homepage_override.mstone"
 POLICIES_CODE = "browser/components/enterprisepolicies/Policies.sys.mjs"
 
 # Code search (full checkout only): folders that hold product code, and file types that read prefs.
@@ -486,6 +494,34 @@ def check_ubo_consent(cfg_text, calls, policies):
         fail("%s: the first screen must navigate to a second screen; leaving about:welcome would cancel the "
              "install while Firefox's permission prompt is open" % CONSENT_VAR)
 
+    # The answer is recorded, and "ask again" reads the same pref and values.
+    def set_prefs(action):
+        found = []
+        if isinstance(action, dict):
+            if action.get("type") == "SET_PREF":
+                p = action.get("data", {}).get("pref", {})
+                found.append((p.get("name"), p.get("value")))
+            for v in action.values():
+                found += set_prefs(v)
+        elif isinstance(action, list):
+            for v in action:
+                found += set_prefs(v)
+        return found
+    for key, value in (("checkedAction", "accepted"), ("uncheckedAction", "declined")):
+        if (CONSENT_CHOICE_PREF, value) not in set_prefs(item.get(key)):
+            fail("%s: %s must SET_PREF %s to %r" % (CONSENT_VAR, key, CONSENT_CHOICE_PREF, value))
+    stored = "messaging-system-action." + CONSENT_CHOICE_PREF
+    rearm = re.search(r"getPref\(\"%s\"\).*?\n(.*?)clearPref\(\"%s\"\)" % (re.escape(stored), re.escape(MSTONE_PREF)),
+                      cfg_text, re.S)
+    if not rearm or "\"accepted\"" not in rearm.group(1) or "\"declined\"" not in rearm.group(1):
+        fail("orbis.cfg: no 'ask again' block: it must read %s and clearPref(%s) unless the value is accepted or "
+             "declined (Shibi, 2026-11-12)" % (stored, MSTONE_PREF))
+    # The decline notice must say plainly that phishing and malware protection is off (Shibi, 2026-11-12).
+    notice = json.dumps(item.get("uncheckedNotice", {}))
+    for words in ("phishing and malware protection is off", "Google Safe Browsing", "Add-ons and themes"):
+        if words not in notice:
+            fail("%s: the unchecked notice must say %r" % (CONSENT_VAR, words))
+
 
 # --------------------------------------------------------------------------------------------------
 
@@ -553,8 +589,8 @@ def main():
 
     all_calls = [("orbis.cfg", c) for c in calls] + [("autoconfig.js", c) for c in loader_calls]
     names = sorted({c[1] for _, c in all_calls})
-    own = [n for n in names if n.startswith("orbis.")]
-    missing = [n for n in names if n not in defs and not n.startswith("orbis.")]
+    own = [n for n in names if n.startswith(OWN_PREFIXES)]
+    missing = [n for n in names if n not in defs and not n.startswith(OWN_PREFIXES)]
     code_refs = {}
     if missing and full_checkout:
         print("Searching the Firefox code for %d pref name(s) not in the pref files..." % len(missing))
@@ -562,7 +598,7 @@ def main():
 
     where = {}
     for n in names:
-        if n.startswith("orbis."):
+        if n.startswith(OWN_PREFIXES):
             where[n] = "Orbis's own pref"
         elif n in defs:
             d = defs[n]
