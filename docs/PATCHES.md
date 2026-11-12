@@ -24,6 +24,7 @@ When the Firefox pin moves (`docs/UPDATING.md`), run `apply-patches.ps1 -Check` 
 no longer applies is rebased by hand and its index lines regenerated; never applied with `--reject` or fuzz.
 
 Order: `fetch-firefox.ps1`, then `apply-patches.ps1`, then `apply-overlay.ps1` (PR #3), then `mach build`.
+`apply-overlay.ps1` refuses to run until patch 0001's `MOZ_APP_PROFILE` line is in `browser/moz.configure`.
 
 ## The patches
 

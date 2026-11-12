@@ -42,7 +42,9 @@ Items marked "planned" do not exist yet.
   a dirty tree, a wrong commit, or a checkout off `C:`. `-Check` writes nothing. Run it before `apply-overlay.ps1`.
 - `scripts/apply-overlay.ps1`: copies the branding to `browser/branding/orbis/`, `mozconfig` to the checkout's
   top, and the policy files to `orbis-dist/` (install-folder layout, for packaging). Refuses any destination
-  outside the checkout, through a junction, or tracked by Firefox's git. It does not apply `patches/`.
+  outside the checkout, through a junction, or tracked by Firefox's git, and refuses everything until
+  `browser/moz.configure` sets `MOZ_APP_PROFILE` (patch 0001: the profile build blocker). It does not apply
+  `patches/`.
 - `scripts/make-placeholder-branding.ps1`: redraws the TODO placeholder images.
 - (planned) `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin, search
   engines).

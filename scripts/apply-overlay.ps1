@@ -23,6 +23,8 @@ Safety rules. The script refuses, and copies nothing, when:
   (no mach, no browser\branding\unofficial);
 - the checkout folder, or any folder above it up to C:\, is a junction or symbolic link;
 - upstream\firefox.json exists and the checkout's HEAD is not the pinned commit;
+- browser\moz.configure has no line imply_option("MOZ_APP_PROFILE", "Orbis"): the profile-folder patch
+  (patches\0001) is not applied, and a build with the Orbis mozconfig would share Firefox's profiles;
 - any destination resolves outside the checkout, or passes through a junction or symbolic link;
 - any destination is a file Firefox itself tracks in git (the Firefox source is never edited by hand);
 - browser\branding\orbis or orbis-dist exists but was not created by this script (no .orbis-overlay marker).
@@ -123,6 +125,19 @@ try {
     } else {
         Write-Host "Checkout $co (pin not checked: no upstream\firefox.json in this branch or no git checkout)"
     }
+
+    # --- Build blocker: no Orbis mozconfig without the profile-folder patch ------------------------
+    # Without patches\0001-profile-folder-orbis.patch, a build shares Firefox's profile folder
+    # (docs\BRANDING.md, BUILD BLOCKER). The line must be there exactly, not commented out.
+    $mozConfigure = Join-Path $co 'browser\moz.configure'
+    $profileLine = 'imply_option("MOZ_APP_PROFILE", "Orbis")'
+    $hasProfile = (Test-Path -LiteralPath $mozConfigure -PathType Leaf) -and
+        (@(Get-Content -LiteralPath $mozConfigure | Where-Object { $_.Trim() -ceq $profileLine }).Count -gt 0)
+    if (-not $hasProfile) {
+        throw (("REFUSED: browser\moz.configure has no line '{0}': the profile-folder patch is not applied, so " +
+                "the mozconfig is not installed. Run scripts\apply-patches.ps1 first.") -f $profileLine)
+    }
+    Write-Host "browser\moz.configure sets MOZ_APP_PROFILE to Orbis (patch 0001 applied)"
 
     # --- What to copy --------------------------------------------------------------------------
     $overlay = Join-Path $repoRoot 'overlay'
