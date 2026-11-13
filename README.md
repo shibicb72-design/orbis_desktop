@@ -35,7 +35,7 @@ is in `docs/SETTINGS.md`.
 
 ## What leaves your PC
 
-A full list will be in `PRIVACY_POLICY.md` (TODO). In short: the sites you visit, your chosen search engine,
+The full list is in the privacy policy, <https://shibicb72-design.github.io/orbis_desktop/privacy.html> (source: `docs/privacy.html`). In short: the sites you visit, your chosen search engine,
 addons.mozilla.org and filter-list publishers (uBlock Origin), Mozilla (security lists, push service, media
 plugins and translation models), Cisco (the OpenH264 video codec), certificate authorities (revocation checks), and
 the Microsoft Store (updates). Nothing goes to Orbis's developer. Each call and its reason is listed in
@@ -53,7 +53,7 @@ release. Paths marked "planned" do not exist yet.
 | `overlay/` | Files copied into the Firefox build: the policy files (`distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`) and the Orbis branding (`browser/branding/orbis/`, placeholder art) |
 | `patches/` | Changes to Mozilla's own files, kept as few as possible; each one explained in `docs/PATCHES.md` |
 | `mozconfig` | Build options (Windows x64, release; no updater, crash reporter or telemetry reporting) |
-| `docs/` | Update guide, build guide, settings rationale, patches, branding rules; later: network audit, Store materials |
+| `docs/` | Update guide, build guide, settings rationale, patches, branding rules, Store text, the privacy policy (`privacy.html`, `index.html`: the GitHub Pages site); later: network audit |
 | `tests/` | (planned) Smoke tests and the network allow-list |
 
 Every difference between Orbis and Firefox is in this repository.

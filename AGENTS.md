@@ -78,6 +78,9 @@ Items marked "planned" do not exist yet.
   `TODO-STORE` placeholder. Never signs or installs. See `docs/MSIX.md`.
 - `docs/STORE-SUBMISSION.md`: Partner Center text (`runFullTrust` justification, certification notes), Store
   blockers, policy 10.2.1 engine currency, and policy risks.
+- `docs/privacy.html`: the privacy policy (Store policy 10.5.1), with `docs/index.html`, published by GitHub Pages
+  (branch `main`, folder `/docs`) at <https://shibicb72-design.github.io/orbis_desktop/privacy.html>. Every
+  statement comes from `docs/SETTINGS.md`; change it, and its effective date, with "Network calls that remain".
 - `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
   Android.
 - (planned) `tests/`: smoke tests (Marionette) and `network-allowlist.txt`. Now: `test-firefox-currency.ps1` only.

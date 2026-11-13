@@ -72,6 +72,9 @@ import sys
 import time
 
 UBO = "uBlock0@raymondhill.net"
+# Patch 0003's orbis-about-description, with -brand-short-name "Orbis".
+ABOUT_DESCRIPTION = ("Orbis is an independent browser that puts privacy first: it blocks trackers by default"
+                     " and offers uBlock Origin at first run.")
 MOZBASE_MODULES = ["mozrunner", "mozprofile", "mozversion", "mozlog", "mozinfo", "mozfile", "mozprocess",
                    "mozdevice", "mozterm", "mozsystemmonitor", "manifestparser", "mozcrash", "mozscreenshot",
                    "moznetwork"]
@@ -844,6 +847,8 @@ def ui_checks(m, root_pid):
         out["aboutVisibleText"] = m.execute_script(
             "const c=document.getElementById('aboutDialogContainer');"
             " return c ? c.innerText.replace(/\\s+/g,' ').trim() : null")
+        # docs/PATCHES.md, 0003: Shibi's wording of 2026-11-12.
+        out["aboutDescriptionAsExpected"] = ABOUT_DESCRIPTION in (out["aboutVisibleText"] or "")
         out["aboutLinks"] = m.execute_script(
             "return Array.from(document.querySelectorAll('[href]')).filter(e => e.getClientRects().length)"
             ".map(e => e.getAttribute('href'))")

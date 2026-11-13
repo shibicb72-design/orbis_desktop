@@ -57,6 +57,10 @@ Paste the justification above, followed by this addendum, unchanged:
 The Store description should say the same: uBlock Origin is offered at first run and downloaded from
 addons.mozilla.org if the user agrees (see policy 10.1.5 under "Risks").
 
+## Privacy policy URL (policy 10.5.1)
+
+<https://shibicb72-design.github.io/orbis_desktop/privacy.html> (source: `docs/privacy.html`; see "Risks", policy 10.5.1).
+
 ## Blockers before the first submission
 
 In this order:
@@ -125,7 +129,11 @@ is the policy's wording; the rest summarises it.
   and the screen comes back at the next start until the user declines or uBlock Origin is installed. The risk for 10.2 stays for users who decline;
   the warning makes it an informed choice.
 - **A privacy policy URL is required (policy 10.5.1).** Under 10.5.1, Desktop Bridge and Win32 products always
-  need a privacy policy, whatever data they collect. Orbis is one, and has no privacy policy yet. It must
-  disclose the network calls that remain (`docs/SETTINGS.md`, for example the push websocket and translation
-  model downloads from Mozilla) and the uBlock Origin download. The About dialog link to it is still to add
-  (`docs/BRANDING.md`).
+  need a privacy policy, whatever data they collect. Orbis is one. Its policy is `docs/privacy.html`, published by
+  GitHub Pages (source: branch `main`, folder `/docs`) at
+  <https://shibicb72-design.github.io/orbis_desktop/privacy.html>. Paste that URL into Partner Center
+  (the app > **Store listing** > **Privacy policy URL**). Check that the URL opens before you submit: Pages must be
+  turned on first. The policy discloses the network calls that remain (`docs/SETTINGS.md`) and the uBlock Origin
+  consent and download; every statement in it comes from `docs/SETTINGS.md`. When a row of "Network calls that
+  remain" changes, change the policy and its effective date in the same PR. The About dialog link to it is still
+  to add (`docs/BRANDING.md`).

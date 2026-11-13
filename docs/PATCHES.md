@@ -25,6 +25,21 @@ A checkout that has an older set of these patches applied (for example 0001 and 
 checkout, or 0001 to 0003) is refused as "changes to tracked files (not exactly our patches)". Run the undo command above, then
 `apply-patches.ps1` again; it applies the whole series.
 
+The same holds for a checkout with an older version of one of these patches, for example the first 0003 (About
+text "... and comes with uBlock Origin.", changed on 2026-11-12). To move such a checkout to the current patches,
+from the repository folder:
+
+```
+git -C %USERPROFILE%\orbis_desktop_src\firefox checkout -- browser/moz.configure browser/app/module.ver browser/app/pbproxy/module.ver ipc/app/module.ver browser/base/content/aboutDialog.xhtml browser/base/content/aboutDialog.js browser/locales/en-US/browser/aboutDialog.ftl browser/installer/windows/msix/distribution/distribution.ini
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-patches.ps1 -Check
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-patches.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-overlay.ps1
+```
+
+The undo touches only these tracked files; the overlay's untracked files stay. Then rebuild (`docs/BUILD.md`; an
+incremental build is enough for a string change) and repackage. A package built before the change still shows the
+old About text, and `verify-build.py ui` reports `aboutDescriptionAsExpected` false on it.
+
 When the Firefox pin moves (`docs/UPDATING.md`), run `apply-patches.ps1 -Check` on the new checkout. A patch that
 no longer applies is rebased by hand and its index lines regenerated; never applied with `--reject` or fuzz.
 
@@ -107,8 +122,8 @@ of that is about Orbis.
 What the patch does:
 
 - `aboutDialog.ftl`: a new string, `orbis-about-description`: "{ -brand-short-name } is an independent browser
-  that puts privacy first: it blocks trackers by default and comes with uBlock Origin." (wording to confirm with
-  Shibi). It does not repeat the attribution: "Orbis is based on Mozilla's Firefox source code and is not made or
+  that puts privacy first: it blocks trackers by default and offers uBlock Origin at first run." (Shibi's wording,
+  2026-11-12; it replaced "... and comes with uBlock Origin.", which predated the consent screen). It does not repeat the attribution: "Orbis is based on Mozilla's Firefox source code and is not made or
   endorsed by Mozilla. ..." is already `trademarkInfo` in the branding's `brand.ftl`, shown at the bottom of the
   same dialog. `community-2`, `community-exp`, `helpus`, `helpus-referrals2`, `bottom-links-terms` and
   `bottom-links-privacy` are deleted. A new id rather than new text under the old ids: Fluent ids name what a
@@ -150,8 +165,10 @@ the profile collision is unfixed (`docs/BRANDING.md`):
 
 About dialog (patch 0003): `scripts/verify-build.py ui` saves the visible dialog text as `aboutVisibleText`, the
 visible links as `aboutLinks` (both in `g-ui.json`) and a screenshot as `g-about.png`. (`aboutText` also has
-hidden elements, such as the "Extended Support Release" label; do not judge by it.) Pass: `aboutVisibleText` has
-"Orbis is an independent browser that puts privacy first" and the `trademarkInfo` line, and none of "designed
+hidden elements, such as the "Extended Support Release" label; do not judge by it.) Pass:
+`aboutDescriptionAsExpected` is true (`aboutVisibleText` has "Orbis is an independent browser that puts privacy
+first: it blocks trackers by default and offers uBlock Origin at first run."), `aboutVisibleText` has the
+`trademarkInfo` line, and none of "designed
 by", "global community", "donation", "get involved", "Terms of Use" or "Privacy Notice"; `aboutLinks` is only
 `about:license`.
 

@@ -392,7 +392,7 @@ pref functions. The loader does not change `general.config.sandbox_enabled`.
 ## Network calls that remain
 
 What Orbis still sends with these settings, read from the Firefox 160 source (Fable's review, 2026-11-12). Every row
-goes into the privacy policy. The full network audit is PR 8.
+goes into the privacy policy (`docs/privacy.html`). The full network audit is PR 8.
 
 First wire check (first Orbis build, 2026-11-12; `scripts/verify-build.py idle`, see `docs/BUILD.md`): a new
 profile started headless and sampled for 3 minutes. Its DNS log (`MOZ_LOG=nsHostResolver:5`) covers only the
