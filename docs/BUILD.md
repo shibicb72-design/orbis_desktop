@@ -115,7 +115,7 @@ as its input and packs every file in it, whatever the package manifest lists. It
 ```
 
 Checked in the second build's MSIX: `orbis.cfg`, `defaults\pref\autoconfig.js` and `distribution\policies.json`
-are under `VFS\ProgramFiles\Orbis Package Root\`, byte-identical to `orbis-dist`.
+are under `VFS\ProgramFiles\Orbis Browser Package Root\`, byte-identical to `orbis-dist`.
 
 Option B, in the build, so that `mach package` itself includes the files:
 

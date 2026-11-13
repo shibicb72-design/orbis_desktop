@@ -4,11 +4,35 @@ Text to paste into Partner Center, what still blocks a submission, and the Store
 Store account and does every upload and publish (`AGENTS.md`); this file only prepares the text. How the package
 is made: `docs/MSIX.md`.
 
+Store name: **Orbis Browser** (reserved by Shibi). Store ID `9N9C8WTZRJ3P`,
+<https://apps.microsoft.com/detail/9N9C8WTZRJ3P>.
+
+## Partner Center identity values
+
+In Partner Center: the app "Orbis Browser" > **Product management** > **Product identity**. Copy each field
+below exactly (case and spaces matter) into `packaging/msix-config.json`. Shibi sent them on 2026-11-12; they
+are in the file now. They are public, not secrets: every installed package's manifest shows them.
+
+| Partner Center field (Product identity) | Value | Goes to (`packaging/msix-config.json`) | Ends up in the MSIX |
+|---|---|---|---|
+| Package/Identity/Name | `shibicb72.OrbisBrowser` | `identityName` | `AppxManifest.xml` `Package/Identity/@Name`; `make-msix.ps1` splits it into mach's `--vendor shibicb72` and checks that the rest is `displayName` without spaces |
+| Package/Identity/Publisher | `CN=85F6A8A7-CE41-468D-8AF2-56079E715950` | `publisher` | `Package/Identity/@Publisher` (mach `--publisher`); the Store signs with it |
+| Package/Properties/PublisherDisplayName | `shibicb72` | `publisherDisplayName` | `Package/Properties/PublisherDisplayName` (mach `--publisher-display-name`) |
+| Package Family Name (PFN) | `shibicb72.OrbisBrowser_bcchdm3mrcmtt` | `packageFamilyName` | Not written: `make-msix.ps1` computes it from Name and Publisher and refuses a mismatch (catches a typo) |
+| The reserved app name | `Orbis Browser` | `displayName`, and `brandFullName` / `-brand-full-name` in `overlay/browser/branding/orbis/locales/en-US/` | `Package/Properties/DisplayName` and `Description` (from `brandFullName`), tile and Start menu name, install folder `Orbis Browser Package Root` |
+
+Not needed in the repository: the Store ID (`9N9C8WTZRJ3P`, for the listing link only), "Package SID" and any
+other field on that page. Check after editing:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1 -ConfigOnly -RequireStoreIdentity
+```
+
 ## Restricted capability: `runFullTrust`
 
 Partner Center asks why the package declares a restricted capability. Paste this text unchanged:
 
-> Orbis is a desktop web browser built on the open-source Gecko engine (Mozilla Firefox source, current release
+> Orbis Browser is a desktop web browser built on the open-source Gecko engine (Mozilla Firefox source, current release
 > version), packaged as MSIX. It is a classic Win32 application (EntryPoint Windows.FullTrustApplication) and
 > cannot run in the AppContainer sandbox, so it requires runFullTrust. The capability is used only for normal
 > browser functions: starting the browser's own sandboxed content, GPU, network and media child processes;
@@ -37,12 +61,11 @@ addons.mozilla.org if the user agrees (see policy 10.1.5 under "Risks").
 
 In this order:
 
-1. **Reserve the name "Orbis" in Partner Center, before anything else.** Everything below depends on it, and
-   the name may be taken. If "Orbis" is not available, the product name changes everywhere (branding,
-   `displayName` in `packaging/msix-config.json`, the identity suffix that `make-msix.ps1` checks).
-2. **Real identity values.** Copy Partner Center's Package/Identity/Name, Package/Identity/Publisher and
-   Package/Properties/PublisherDisplayName into `packaging/msix-config.json` (now `TODO-STORE`), and build with
-   `make-msix.ps1 -RequireStoreIdentity`, which refuses placeholders (`docs/MSIX.md`).
+1. **Name reserved: done.** Shibi reserved "Orbis Browser" (not "Orbis"). The branding's full name, the
+   tile name and `displayName` now say "Orbis Browser" (`docs/BRANDING.md`).
+2. **Real identity values: done.** In `packaging/msix-config.json` (table above). Build every upload with
+   `make-msix.ps1 -RequireStoreIdentity` (`docs/MSIX.md`). The next build must be a full one: the existing
+   build still has `brandFullName=Orbis`, which `make-msix.ps1` refuses as the package's DisplayName.
 3. **Real artwork.** Every icon, tile and Store logo is a TODO placeholder (`docs/BRANDING.md`, PR 9), and the
    tile background `#20123A` is Firefox purple.
 4. **An install test that proves the policies and AutoConfig work inside the MSIX.** Nothing has been installed

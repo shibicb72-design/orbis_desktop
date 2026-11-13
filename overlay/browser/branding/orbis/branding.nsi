@@ -10,7 +10,7 @@
 # BrandFullNameInternal is used for some registry and file system values
 # instead of BrandFullName and typically should not be modified.
 !define BrandFullNameInternal "Orbis"
-!define BrandFullName         "Orbis"
+!define BrandFullName         "Orbis Browser"
 !define CompanyName           "Orbis"
 !define URLInfoAbout          "https://github.com/shibicb72-design/orbis_desktop"
 !define HelpLink              "https://github.com/shibicb72-design/orbis_desktop"

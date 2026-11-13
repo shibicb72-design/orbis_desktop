@@ -10,9 +10,8 @@ party, including without limitation the Firefox name or logo."
 
 Rules for Orbis (also in `AGENTS.md`):
 
-1. **The product name never contains "Firefox" or "Mozilla".** The name is "Orbis" everywhere a user sees a
-   product name: window titles, menus, the About dialog, the Start menu, the Microsoft Store listing, the
-   installer, the executable (`orbis.exe`).
+1. **The product name never contains "Firefox" or "Mozilla".** The full name is **"Orbis Browser"**, the name
+   reserved in the Microsoft Store; the short name is **"Orbis"**. See "Names" below.
 2. **No Firefox or Mozilla logos or artwork.** That includes the globe and wordmarks in Firefox's
    `browser/branding/unofficial` template (see "Artwork" below).
 3. **Truthful attribution is allowed and wanted:** "Orbis is based on Mozilla's Firefox source code and is not made
@@ -30,6 +29,33 @@ Rules for Orbis (also in `AGENTS.md`):
    name: `firefox.ico`, `firefox64.ico`, `pref/firefox-branding.js`, `content/firefox-wordmark.svg` (its content is
    the Orbis wordmark), `FirefoxBranding()` in `moz.build`, `MOZ_APP_BASENAME`.
 
+## Names
+
+The Store reservation is "Orbis Browser" (Store ID `9N9C8WTZRJ3P`). The split follows Firefox's own (full
+name "Mozilla Firefox", short name "Firefox"):
+
+| Where the user sees it | Name | Set by |
+|---|---|---|
+| Microsoft Store listing, `AppxManifest.xml` `Properties/DisplayName` and `Description` | Orbis Browser | `brandFullName` (mach reads it from the build) |
+| Start menu entry and tile, startup task name (`uap:VisualElements/@DisplayName`) | Orbis Browser | `displayName` in `packaging/msix-config.json` (mach `--identity-name`) |
+| Install folder in the package | `VFS\ProgramFiles\Orbis Browser Package Root\` | `displayName` |
+| Window title | "Orbis Browser" (empty window), "<page title> — Orbis Browser", "Orbis Browser Private Browsing", "<page title> — Orbis Browser Private Browsing" | `-brand-full-name` (`browser.ftl`) |
+| About dialog title | "About Orbis Browser" | `-brand-full-name` (`aboutDialog.ftl`) |
+| Windows sign-in prompts (saved passwords, cards), prompt titles | Orbis Browser | `-brand-full-name`, `brandFullName` |
+| About dialog attribution (`trademarkInfo`) | "Orbis Browser is based on Mozilla's Firefox source code ..." | `brand.ftl` |
+| About dialog description (patch 0003), menus, settings, notifications, "Quit Orbis" | Orbis | `-brand-short-name`, `-brand-shorter-name`, `-brand-product-name` |
+| Private-window shortcut, pinned shortcut (`Orbis.lnk`) | Orbis | `-brand-shortcut-name`, `MOZ_APP_DISPLAYNAME` (must match each other: `nsWindowsShellService.cpp`) |
+| Task Manager, File Properties of `orbis.exe` (`ProductName`, `FileDescription`) | Orbis | `MOZ_APP_DISPLAYNAME` (`module.ver`) |
+| Executable and command-line alias | `orbis.exe` | `--with-app-name=orbis` (unchanged) |
+| Profile folders | `%APPDATA%\Orbis`, `%LOCALAPPDATA%\Orbis` | patch 0001 `MOZ_APP_PROFILE` (unchanged: no data move) |
+| Store identity | `shibicb72.OrbisBrowser` | Partner Center (`docs/STORE-SUBMISSION.md`) |
+
+"Orbis" alone stays right for the short name, the in-app UI text and the docs and README (the project is Orbis
+Desktop). Use "Orbis Browser" where the Store listing or the package is named, and in the Store submission text.
+
+`brandFullName` (`brand.properties`) and `-brand-full-name` (`brand.ftl`) must stay equal to each other and to
+`displayName`; `scripts/make-msix.ps1` refuses otherwise (`-ConfigOnly` checks it without a build).
+
 ## How the build picks up Orbis branding
 
 | Where | Setting | Value |
@@ -38,9 +64,11 @@ Rules for Orbis (also in `AGENTS.md`):
 | `mozconfig` | `--disable-official-branding` | Mozilla's official branding (which would override `--with-branding`) is off |
 | `mozconfig` | `--with-app-name` | `orbis`: `orbis.exe`, and the remoting name, so starting Orbis never hands a URL to a running Firefox |
 | `configure.sh` | `MOZ_APP_DISPLAYNAME` | `Orbis` |
-| `locales/en-US/brand.ftl` | `-brand-short-name`, `-brand-full-name`, `-brand-product-name`, `-vendor-short-name`, ... | `Orbis` |
-| `locales/en-US/brand.properties` | `brandShortName`, `brandFullName`, ... | `Orbis` |
-| `branding.nsi` | `BrandFullName`, `CompanyName`, URLs, `CertNameDownload` | `Orbis`, the Orbis repository, blank (no NSIS installer is shipped) |
+| `locales/en-US/brand.ftl` | `-brand-full-name` | `Orbis Browser` |
+| `locales/en-US/brand.ftl` | `-brand-shorter-name`, `-brand-short-name`, `-brand-shortcut-name`, `-brand-product-name`, `-vendor-short-name` | `Orbis` |
+| `locales/en-US/brand.properties` | `brandFullName` | `Orbis Browser` |
+| `locales/en-US/brand.properties` | `brandShorterName`, `brandShortName` | `Orbis` |
+| `branding.nsi` | `BrandFullName`; `BrandFullNameInternal`, `CompanyName`; URLs; `CertNameDownload` | `Orbis Browser`; `Orbis`; the Orbis repository; blank (no NSIS installer is shipped) |
 | `pref/firefox-branding.js` | start and welcome pages | empty; the template's updater prefs and `devtools.selfxss.count` are dropped |
 
 `scripts/apply-overlay.ps1` copies `overlay/browser/branding/orbis/` to `browser/branding/orbis/` in the Firefox
@@ -118,8 +146,8 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   later files with the same name; the About dialog would show "Windows MSIX package" and "mozilla-MSIX - 1.0".
   Patch 0004 deletes the template file, so the Orbis MSIX has no `distribution.ini` (checked by
   `scripts/make-msix.ps1` in the unpacked package). See `docs/MSIX.md`.
-- **MSIX identity: placeholders until the Store account exists.** `packaging/msix-config.json` has `TODO-STORE`
-  for the package identity name, publisher and publisher display name (`docs/MSIX.md`). The manifest's
+- **MSIX identity: real Partner Center values.** `packaging/msix-config.json` has `shibicb72.OrbisBrowser`,
+  its publisher and publisher display name (`docs/STORE-SUBMISSION.md`, `docs/MSIX.md`). The manifest's
   background-task class ID is `Mozilla.MsixComServer.BackgroundTaskHost` from the build: an internal identifier
   (rule 5), not shown to users.
 - **Orbis reads Firefox's group policies: `Software\Policies\Mozilla\Firefox`.** The enterprise-policy registry
@@ -171,4 +199,9 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   template unchanged (`docs/MSIX.md`, open items). Choose an Orbis colour with the real artwork (PR 9).
 - **Icons with PNG-compressed entries.** The generated `.ico` files store PNG images (valid since Windows Vista).
   That the build's resource compiler accepts them is unverified until the first build.
-- **The name "Orbis"** in the Microsoft Store and as a trademark: not checked.
+- **The name.** "Orbis Browser" is reserved in the Microsoft Store (Store ID `9N9C8WTZRJ3P`). "Orbis" or
+  "Orbis Browser" as a trademark: not checked.
+- **Next build: check the names.** The first build said "Orbis" as the full name. After the next build, check
+  the window title ("— Orbis Browser"), "About Orbis Browser" and the `trademarkInfo` line
+  (`scripts/verify-build.py ui` reports them), and the MSIX `DisplayName` (`make-msix.ps1` fails if it is not
+  "Orbis Browser").
