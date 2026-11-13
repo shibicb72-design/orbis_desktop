@@ -69,9 +69,13 @@ In this order:
    tile name and `displayName` now say "Orbis Browser" (`docs/BRANDING.md`).
 2. **Real identity values: done.** In `packaging/msix-config.json` (table above). Build every upload with
    `make-msix.ps1 -RequireStoreIdentity` (`docs/MSIX.md`). The first Store package was built this way on
-   2026-11-12 (an incremental build was enough to pick up `brandFullName=Orbis Browser`); not uploaded.
-3. **Real artwork.** Every icon, tile and Store logo is a TODO placeholder (`docs/BRANDING.md`, PR 9), and the
-   tile background `#20123A` is Firefox purple.
+   2026-11-12 (an incremental build was enough to pick up `brandFullName=Orbis Browser`); not uploaded. It was
+   replaced the same day by a package of main `f480cd8` with the new About text and the Orbit art
+   (`docs/MSIX.md`); also not uploaded.
+3. **Real artwork: done.** Every icon, tile and Store logo is the original "Orbit" art (`docs/BRANDING.md`),
+   checked in the package of main `f480cd8`. Still open: the manifest's tile background `#20123A` is Firefox
+   purple. The Orbit tiles are opaque, so it does not show on them, but it may show behind the plated
+   `Square44x44Logo` (`docs/BRANDING.md`, open items).
 4. **An install test that proves the policies and AutoConfig work inside the MSIX.** Nothing has been installed
    yet. The test must show, in the installed package: `policies.json` active (`about:policies`), the
    `orbis.cfg` prefs locked, the uBlock Origin consent screen on first run (uBlock Origin installed after

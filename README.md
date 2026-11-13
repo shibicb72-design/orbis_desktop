@@ -50,7 +50,7 @@ release. Paths marked "planned" do not exist yet.
 |---|---|
 | `upstream/firefox.json` | The Firefox release tag and commit that Orbis is built from |
 | `scripts/` | Fetch the pinned Firefox source, check that it is current, check the settings and mozconfig, apply the patches and the overlay, check a built Orbis (`verify-build.py`); later: build, package, test |
-| `overlay/` | Files copied into the Firefox build: the policy files (`distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`) and the Orbis branding (`browser/branding/orbis/`, placeholder art) |
+| `overlay/` | Files copied into the Firefox build: the policy files (`distribution/policies.json`, `orbis.cfg`, `defaults/pref/autoconfig.js`) and the Orbis branding (`browser/branding/orbis/`, with the original "Orbit" icon and tiles) |
 | `patches/` | Changes to Mozilla's own files, kept as few as possible; each one explained in `docs/PATCHES.md` |
 | `mozconfig` | Build options (Windows x64, release; no updater, crash reporter or telemetry reporting) |
 | `docs/` | Update guide, build guide, settings rationale, patches, branding rules, Store text, the privacy policy (`privacy.html`, `index.html`: the GitHub Pages site); later: network audit |

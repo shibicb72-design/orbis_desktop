@@ -89,6 +89,13 @@ are "Orbis Browser"; identity, publisher, `PublisherDisplayName` and family name
 `AppxSignature.p7x`). 142,179,979 bytes, SHA-256
 `30B84C5C4944DAC8A8F7CBA962E089D38B03506AB3FCA936E1791DBD76AAC292`. Not installed, not uploaded.
 
+Second Store package, 2026-11-12, of main `f480cd8` (the new About text and the Orbit art), after an
+incremental `mach build` and `mach package` (`docs/BUILD.md`, "Incremental builds and icons"): every check
+passed, with the same identity values. All 11 `Assets\` files are the Orbit art, byte-identical to the overlay
+in both directions. 142,624,117 bytes, SHA-256
+`61136F85417BC6D86BE4EAEE030555699D24D6E9A920109A5E47682677BA39E1`. Same version, `160.0.0.0`: the first package
+was never uploaded. Not installed, not uploaded.
+
 ### Version
 
 `Package/Identity/Version` is four numbers, each at most 65535, and the Store requires the last to be 0. mach's
