@@ -1,0 +1,19 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- Orbis document icon (files Orbis opens, for example .html): a page with the small Orbit mark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <path d="M44 12H164L220 68V244H44Z" fill="#FFFFFF" stroke="#7A8C8C" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M164 12V68H220" fill="#E3EBEB" stroke="#7A8C8C" stroke-width="8" stroke-linejoin="round"/>
+  <svg x="62" y="90" width="140" height="140" viewBox="0 0 256 256">
+    <rect x="0" y="0" width="256" height="256" rx="56" fill="#216969"/>
+    <g transform="rotate(-28 128 128)">
+      <path d="M16,128 A112,46 0 0 1 240,128" fill="none" stroke="#F4F7F7" stroke-width="30" stroke-linecap="round"/>
+    </g>
+    <circle cx="128" cy="128" r="76" fill="#9AD3CF"/>
+    <g transform="rotate(-28 128 128)">
+      <path d="M240,128 A112,46 0 0 1 16,128" fill="none" stroke="#216969" stroke-width="42"/>
+      <path d="M240,128 A112,46 0 0 1 16,128" fill="none" stroke="#F4F7F7" stroke-width="30" stroke-linecap="round"/>
+    </g>
+  </svg>
+</svg>

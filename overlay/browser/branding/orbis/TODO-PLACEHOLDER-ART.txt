@@ -1,9 +1,0 @@
-TODO (PR 9): every image in this folder is a placeholder.
-
-The PNG, ICO, BMP and JPG files were drawn by scripts/make-placeholder-branding.ps1 (a blue disc, a white "O",
-and "TODO" where there is room). The SVG files under content/ were written by hand for Orbis. No image comes from
-Firefox: the file names and pixel sizes match Firefox 160's browser/branding/unofficial template, nothing else.
-
-Mac-only template files (Assets.car, disk.icns, document.icns, firefox.icns, dsstore) are not included.
-
-See docs/BRANDING.md.

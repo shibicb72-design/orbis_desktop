@@ -1,0 +1,18 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- Orbis "Orbit" icon: a mint planet with a tilted cream orbit ring and a satellite, on a rounded teal tile.
+     Use above 24 px; orbit-small.svg is the variant for 24 px and below. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#216969"/>
+  <g transform="rotate(-28 128 128)">
+    <path d="M24,128 A104,40 0 0 1 232,128" fill="none" stroke="#F4F7F7" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  <circle cx="128" cy="128" r="58" fill="#9AD3CF"/>
+  <g transform="rotate(-28 128 128)">
+    <path d="M232,128 A104,40 0 0 1 24,128" fill="none" stroke="#216969" stroke-width="30"/>
+    <path d="M232,128 A104,40 0 0 1 24,128" fill="none" stroke="#F4F7F7" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="180" cy="162.6" r="20" fill="#216969"/>
+    <circle cx="180" cy="162.6" r="14" fill="#F4F7F7"/>
+  </g>
+</svg>

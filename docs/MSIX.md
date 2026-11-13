@@ -60,7 +60,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1 -Requi
 | `arch` | `x86_64` | `ProcessorArchitecture` `x64` | The only architecture Orbis builds |
 | `orbisRevision` | `0` | `Package/Identity/Version` | See "Version" |
 | `capabilities` | `["runFullTrust"]` | checked only | Firefox's template declares exactly one capability, `rescap:runFullTrust` (a Win32 desktop app in a package needs it). The script fails if the manifest has any other list. The Store asks for a justification of restricted capabilities at submission: the text is in `docs/STORE-SUBMISSION.md` |
-| `assets` | `overlay/browser/branding/orbis/msix/Assets` | `Assets\` | Placeholder art (`docs/BRANDING.md`). mach copies `<branding>/msix/Assets` from the build's `--with-branding` folder; the script checks that every file in the package is byte-identical to this folder. The file names match Firefox's official branding, which the template's `Resources.pri` expects |
+| `assets` | `overlay/browser/branding/orbis/msix/Assets` | `Assets\` | The "Orbit" art, drawn by `scripts/make-branding.py` (`docs/BRANDING.md`). mach copies `<branding>/msix/Assets` from the build's `--with-branding` folder; the script checks that every file in the package is byte-identical to this folder. The file names match Firefox's official branding, which the template's `Resources.pri` expects |
 
 The values come from Partner Center (`docs/STORE-SUBMISSION.md`, "Partner Center identity values"). Nothing
 secret is in the file: they are public (they are in every installed package's manifest).
@@ -147,7 +147,7 @@ After `makeappx unpack`:
   `Properties/DisplayName`, `PublisherDisplayName`, the tile `DisplayName`, the capability list, and
   `Application/@Executable` `VFS\ProgramFiles\Orbis Browser Package Root\orbis.exe`. Outside comments it must not contain
   "Mozilla" or "Firefox", except `Mozilla.MsixComServer.BackgroundTaskHost` (open items).
-- `Assets\`: every placeholder file, byte-identical, and two-way: a file in the package's `Assets\` that is not
+- `Assets\`: every file of the config's folder, byte-identical, and two-way: a file in the package's `Assets\` that is not
   in the config's folder also fails.
 - `VFS\ProgramFiles\Orbis Browser Package Root\`: `orbis.cfg`, `defaults\pref\autoconfig.js` and
   `distribution\policies.json`, byte-identical to `orbis-dist`; the `distribution` folder has only
@@ -260,7 +260,7 @@ folders. Use full paths, and `-AllUsers` where given below.
 - **Manifest content from Firefox's template, unchanged:** file-type and `http`/`https`/`mailto` associations,
   the notification COM server (`notificationserver.dll`), the disabled `LaunchOnLogin` startup task, the
   accessibility proxy, `TargetDeviceFamily` MinVersion 10.0.17763.0, tile background `#20123A` (Firefox purple;
-  `docs/BRANDING.md`). Review with the real artwork (PR 9).
+  `docs/BRANDING.md`: the Orbit tile images are opaque teal, so it does not show on the tiles).
 - **Store checks not run:** Windows App Certification Kit and Partner Center's package validation. Submission
   text, blockers and risks: `docs/STORE-SUBMISSION.md`.
 - **`mach package` still leaves out `orbis-dist`** (option B in `docs/BUILD.md`); this script works around it.

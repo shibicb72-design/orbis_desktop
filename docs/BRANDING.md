@@ -77,10 +77,44 @@ against the pinned source.
 
 ## Artwork
 
-Every image is a **placeholder marked TODO**: a blue disc with a white "O" and the word "TODO" where it fits
-(`overlay/browser/branding/orbis/TODO-PLACEHOLDER-ART.txt`). `scripts/make-placeholder-branding.ps1` draws the PNG,
-ICO, BMP and JPG files; the four SVG files were written by hand. Only the file names and pixel sizes come from
-Firefox 160's `browser/branding/unofficial`.
+The icon is **"Orbit"** (Shibi's choice, 2026-11-12): a mint planet with a tilted cream orbit ring and a
+satellite, on a rounded teal tile. Palette, from the Android app: teal `#216969`, mint `#9AD3CF`, cream `#F4F7F7`,
+deep `#1B3A4B`. It is original Orbis artwork, drawn for Orbis, under the repository's licence, MPL-2.0 (`LICENSE`;
+each SVG source has the MPL header). No Firefox or Mozilla art is used.
+
+Sources, in `branding/orbis/source/` (outside the overlay, so they are not copied into the build):
+
+| Source | Used for |
+|---|---|
+| `orbit.svg` | The icon above 24 px. Also `content/about-logo.svg` (a copy) |
+| `orbit-small.svg` | The icon at 24 px and below: the tile reaches the edge, the planet is larger, the ring thicker, and there is no satellite. The full icon smudges at 16 px |
+| `document.svg` | `document.ico`, `msix/Assets/Document44x44.png` |
+| `document-pdf.svg` | `document_pdf.ico`. Also `content/document_pdf.svg` (a copy) |
+| `newtab.svg`, `newwindow.svg` | `newtab.ico`, `newwindow.ico` (jump-list tasks) |
+
+`scripts/make-branding.py` draws every PNG, ICO, BMP and JPG file in `overlay/browser/branding/orbis/` from them,
+with headless Microsoft Edge (draws each SVG at 1024 px) and Pillow (scales down with Lanczos and writes the
+files). Run `python scripts/make-branding.py` after changing a source (not `python -I`: Pillow is often a per-user
+install); `--sheet FILE.png` also writes a comparison sheet of the full and small icons. The output is
+byte-identical from run to run with the same Edge and Pillow. The script makes two variants by text substitution:
+**private** (teal becomes deep `#1B3A4B`: `pbmode.ico`, `about-logo-private*.png`, `PrivateBrowsing_*.png`) and
+**mark** (`orbit.svg` without its tile, for Start tiles that draw their own background).
+
+| Files | Art |
+|---|---|
+| `firefox.ico` (16, 24, 32, 48, 64, 256), `firefox64.ico` (16 to 64), `pbmode.ico` (16 to 256) | Small variant at 16 and 24, full icon above. Sizes below 256 are 32-bit BMP entries, 256 is PNG |
+| `document.ico`, `document_pdf.ico` (16 to 256), `newtab.ico`, `newwindow.ico` (16, 24, 32) | Their own sources |
+| `default16.png`, `default22.png`, `default24.png` | Small variant |
+| `default32.png` to `default256.png`, `content/about-logo*.png`, `content/about.png` | Full icon |
+| `VisualElements_*.png`, `PrivateBrowsing_*.png` (classic Start tiles) | Mark on transparent; the tile colour is `BackgroundColor` in `*.VisualElementsManifest.xml`: teal `#216969`, private deep `#1b3a4b` |
+| `msix/Assets/Square150x150Logo`, `MedTile`, `SmallTile`, `LargeTile`, `Wide310x150Logo` | Mark on an opaque teal tile, so the manifest's tile background (Firefox purple `#20123A`, from the template) does not show |
+| `msix/Assets/Square44x44Logo.scale-200.png`, `StoreLogo.scale-200.png` | Full icon |
+| `msix/Assets/Square44x44Logo.targetsize-256.png` and its `altform-unplated` and `altform-lightunplated` twins | Small variant: Windows scales these down to 16 to 48 px for the taskbar, title bar and Start list, and the template's `Resources.pri` lists no smaller target sizes |
+| `background.png`, `stubinstaller/bgstub.jpg`, `wiz*.bmp` | Full icon or mark on deep, teal or white (macOS and NSIS files, not shipped in the MSIX; drawn so that no placeholder is left) |
+
+File names and pixel sizes are unchanged from the placeholders, which took them from Firefox 160's
+`browser/branding/unofficial`. The wordmarks (`content/about-wordmark.svg`, `content/firefox-wordmark.svg`) are the
+word "Orbis" set in Arial, written by hand.
 
 Why the template's art was not reused: its images carry no licence notice of their own, `about-logo.svg` (the
 blue globe) has no MPL header, `firefox-wordmark.svg` and `about-wordmark.svg` draw the word "Firefox", and the
@@ -179,7 +213,8 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   not set. Extensions see the same values through `runtime.getBrowserInfo()`. Changing them would change the
   user agent and the search configuration (rule 4) and needs a patch; `about:support` is a troubleshooting page,
   not a product name. Revisit only if the Store review objects.
-- **Real artwork and Store tiles (PR 9).** Replace every placeholder; keep the same file names and sizes.
+- **Real artwork: done ("Orbit", `branding/orbis/source/`).** To check in the next build: the icons in the
+  taskbar, Start and the About dialog, at 100% and 150% display scaling.
 - **Strings outside the branding folder (PR 9).** Some Firefox pages name Mozilla or Firefox directly, for example
   `browser/base/content/overrides/app-license.html` ("made available to you by the Mozilla Project"). Audit them
   and override or patch the ones a user sees. `-vendor-short-name` is now "Orbis", so check every string that uses
@@ -189,16 +224,18 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   matter. Unverified. It is in the MSIX under that name (`make-msix.ps1` reports it), a file name with "firefox"
   that a user can see in the install folder.
 - **Firefox mascot art from outside the branding folder: `confused_fox.pdf` and `kit.gif`.** Both are Firefox
-  mascot art from `browser/components/shell/`, not the branding folder, so the placeholder branding does not
+  mascot art from `browser/components/shell/`, not the branding folder, so the Orbis branding does not
   replace them, and both are in the MSIX (`browser\confused_fox.pdf`, `browser\components\shell\assets\kit.gif`).
   `confused_fox.pdf` is the bundled PDF that `ShellService.sys.mjs` hands to Windows' "Open with" dialog when
   Orbis asks to become the default PDF viewer; `kit.gif` is the animation `WindowsUIOverlayImage.cpp` draws over
   Windows' own dialogs in the set-as-default flow. Replace them with Orbis art (same names, a patch or overlay
   to decide) or patch the flows out (PR 9).
 - **Tile background `#20123A` is Firefox purple.** The MSIX manifest's tile `BackgroundColor` comes from Firefox's
-  template unchanged (`docs/MSIX.md`, open items). Choose an Orbis colour with the real artwork (PR 9).
-- **Icons with PNG-compressed entries.** The generated `.ico` files store PNG images (valid since Windows Vista).
-  That the build's resource compiler accepts them is unverified until the first build.
+  template unchanged (`docs/MSIX.md`, open items). The Orbit tile images are opaque teal, so it does not show on
+  the tiles; Windows may still use it behind the plated `Square44x44Logo.scale-200.png` (transparent corners).
+  Changing it needs a patch to the template; teal `#216969` would match.
+- **Icon entries.** The `.ico` files store 32-bit BMP images below 256 px and a PNG image at 256 px (the
+  placeholders were PNG only). The resource compiler accepting them: to check in the next build.
 - **The name.** "Orbis Browser" is reserved in the Microsoft Store (Store ID `9N9C8WTZRJ3P`). "Orbis" or
   "Orbis Browser" as a trademark: not checked.
 - **Names: checked in the build of 2026-11-12.** `scripts/verify-build.py ui`: window title "Welcome to Orbis —
