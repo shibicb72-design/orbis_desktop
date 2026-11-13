@@ -16,6 +16,8 @@ The script:
 
 1. Refuses unless every path is on drive C:, outside this repository and not through a junction, and the
    checkout has patch 0004 applied (the MSIX template's `distribution.ini` is gone).
+   It also checks the config against the branding: see "Settings". `-ConfigOnly` runs only that part (no
+   build, checkout or Windows SDK needed).
 2. Stages `msix-work\stage\orbis\`: the build's `orbis-<version>.en-US.win64.zip` expanded, plus `orbis-dist\`
    (`orbis.cfg`, `defaults\pref\autoconfig.js`, `distribution\policies.json`). Same layout as the test install
    in `docs/BUILD.md`.
@@ -34,9 +36,11 @@ build's folder. mach also writes its own temporary copy of the package to
 re-checks an existing package without rebuilding it. `makeappx.exe` comes from the Windows SDK that
 `mach bootstrap` installed (`%USERPROFILE%\.mozbuild\vs\Windows Kits\10\bin\<version>\x64`).
 
-**Store identity placeholders.** While `packaging/msix-config.json` still has `TODO-STORE` values, the script
-prints a warning block at the start and a warning at the end: such a package cannot be uploaded. Build every
-package meant for upload with `-RequireStoreIdentity`, which refuses (exit 1) while any placeholder is left:
+**Store identity.** `packaging/msix-config.json` holds the real Partner Center values for "Orbis Browser"
+(Store ID `9N9C8WTZRJ3P`, <https://apps.microsoft.com/detail/9N9C8WTZRJ3P>). If a value is ever set back to a
+`TODO-STORE` placeholder, the script prints a warning block at the start and a warning at the end: such a
+package cannot be uploaded. Build every package meant for upload with `-RequireStoreIdentity`, which refuses
+(exit 1) while any placeholder is left:
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1 -RequireStoreIdentity
@@ -46,19 +50,37 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1 -Requi
 
 | Key | Value now | Goes to | Notes |
 |---|---|---|---|
-| `identityName` | `TODO-STORE.Orbis` | `Package/Identity/Name` | **TODO-STORE.** Partner Center assigns it when Shibi reserves the name (Product identity page, "Package/Identity/Name", often `<digits><publisher>.<name>`). mach builds it as `<--vendor>.<--identity-name>`, so it must end in `.` + `displayName` without spaces; the script splits it and refuses any other form |
-| `publisher` | `CN=TODO-STORE` | `Package/Identity/Publisher` | **TODO-STORE.** Partner Center's "Package/Identity/Publisher" (`CN=<GUID>`). The Store signs the package with it. A local signed test needs a certificate whose subject is exactly this value |
-| `publisherDisplayName` | `TODO-STORE` | `Package/Properties/PublisherDisplayName` | **TODO-STORE.** Partner Center's "Package/Properties/PublisherDisplayName" (the account's publisher name). mach's default would be "Mozilla Corporation" |
-| `displayName` | `Orbis` | `--identity-name`: tile and Start menu name (`uap:VisualElements/@DisplayName`), install folder `VFS\ProgramFiles\Orbis Package Root\`, identity suffix | Must equal the name reserved in Partner Center. `Package/Properties/DisplayName` itself is not set from here: mach takes it from `brandFullName` in the branding's `brand.properties` ("Orbis"). The script checks that both say this value |
+| `identityName` | `shibicb72.OrbisBrowser` | `Package/Identity/Name` | Partner Center, Product identity, "Package/Identity/Name". mach builds it as `<--vendor>.<--identity-name without spaces>`, so it must end in `.` + `displayName` without spaces (`.OrbisBrowser`); the script passes `--vendor shibicb72 --identity-name "Orbis Browser"` and refuses any other form |
+| `publisher` | `CN=85F6A8A7-CE41-468D-8AF2-56079E715950` | `Package/Identity/Publisher` | Partner Center's "Package/Identity/Publisher". The Store signs the package with it. A local signed test needs a certificate whose subject is exactly this value |
+| `publisherDisplayName` | `shibicb72` | `Package/Properties/PublisherDisplayName` | Partner Center's "Package/Properties/PublisherDisplayName" (the account's publisher name). mach's default would be "Mozilla Corporation" |
+| `packageFamilyName` | `shibicb72.OrbisBrowser_bcchdm3mrcmtt` | checked only | Partner Center's "Package Family Name (PFN)". Windows derives it from `identityName` and `publisher` (SHA-256 of the publisher); the script computes it and refuses a mismatch, which catches a mistyped publisher before upload |
+| `displayName` | `Orbis Browser` | `--identity-name`: tile and Start menu name (`uap:VisualElements/@DisplayName`), startup task name, install folder `VFS\ProgramFiles\Orbis Browser Package Root\`, identity suffix | Must equal the name reserved in Partner Center ("Orbis Browser"). `Package/Properties/DisplayName` and `Description` are not set from here: mach takes both from `brandFullName` in the build's `brand.properties`. The script checks `brandFullName` and `-brand-full-name` in the `branding` folder before building and the manifest after |
+| `branding` | `overlay/browser/branding/orbis` | checked only | The branding whose full name must equal `displayName` |
 | `channel` | `unofficial` | mach `--channel` | Orbis is not a Mozilla channel. In `msix.py` the channel only adds " Beta" or " ESR" to names (not for `unofficial`) and names mach's temporary folder |
 | `arch` | `x86_64` | `ProcessorArchitecture` `x64` | The only architecture Orbis builds |
 | `orbisRevision` | `0` | `Package/Identity/Version` | See "Version" |
 | `capabilities` | `["runFullTrust"]` | checked only | Firefox's template declares exactly one capability, `rescap:runFullTrust` (a Win32 desktop app in a package needs it). The script fails if the manifest has any other list. The Store asks for a justification of restricted capabilities at submission: the text is in `docs/STORE-SUBMISSION.md` |
 | `assets` | `overlay/browser/branding/orbis/msix/Assets` | `Assets\` | Placeholder art (`docs/BRANDING.md`). mach copies `<branding>/msix/Assets` from the build's `--with-branding` folder; the script checks that every file in the package is byte-identical to this folder. The file names match Firefox's official branding, which the template's `Resources.pri` expects |
 
-When Shibi has reserved the name: copy the three Partner Center values into `identityName`, `publisher` and
-`publisherDisplayName`, rebuild with `make-msix.ps1 -RequireStoreIdentity`, and upload. Nothing secret goes into the file: these three
-values are public (they are in every installed package's manifest).
+The values come from Partner Center (`docs/STORE-SUBMISSION.md`, "Partner Center identity values"). Nothing
+secret is in the file: they are public (they are in every installed package's manifest).
+
+How mach makes the names, from the pinned `python/mozbuild/mozbuild/repackaging/msix.py` and
+`mach_commands.py`: `--identity-name` becomes `displayname`; the identity is
+`f"{vendor}.{displayname}".replace(" ", "")`; the install folder is `f"{displayname} Package Root"`;
+`MOZ_APP_DISPLAYNAME` in `AppxManifest.xml.in` (tile, startup task) is `displayname`; `APPX_DISPLAYNAME` and
+`APPX_DESCRIPTION` are `brandFullName` read from the build's `chrome/en-US/locale/branding/brand.properties`
+(`channel` `unofficial` adds no suffix). So `<vendor>.OrbisBrowser` works with unpatched mach. A Partner Center
+name that does not end in `.OrbisBrowser` would need a patch: `mach repackage msix` does not pass
+`repackage_msix()`'s `identity` argument.
+
+Checked on 2026-11-12 without a new build: `mach repackage msix` run through this script on the existing
+160.0 build (which still had `brandFullName=Orbis`) gave `Identity Name="shibicb72.OrbisBrowser"`,
+`Publisher="CN=85F6A8A7-CE41-468D-8AF2-56079E715950"`, `PublisherDisplayName` `shibicb72`, tile and startup
+task `Orbis Browser`, `VFS\ProgramFiles\Orbis Browser Package Root\orbis.exe`, family name
+`shibicb72.OrbisBrowser_bcchdm3mrcmtt`. The only failures were `DisplayName` and `Description` "Orbis", from
+that old build's `brand.properties`; the next build takes "Orbis Browser" from the new branding. That test
+package was deleted.
 
 ### Version
 
@@ -116,11 +138,11 @@ After `makeappx unpack`:
 
 - `AppxManifest.xml`: `Identity` `Name`, `Publisher`, `Version`, `ProcessorArchitecture` x64,
   `Properties/DisplayName`, `PublisherDisplayName`, the tile `DisplayName`, the capability list, and
-  `Application/@Executable` `VFS\ProgramFiles\Orbis Package Root\orbis.exe`. Outside comments it must not contain
+  `Application/@Executable` `VFS\ProgramFiles\Orbis Browser Package Root\orbis.exe`. Outside comments it must not contain
   "Mozilla" or "Firefox", except `Mozilla.MsixComServer.BackgroundTaskHost` (open items).
 - `Assets\`: every placeholder file, byte-identical, and two-way: a file in the package's `Assets\` that is not
   in the config's folder also fails.
-- `VFS\ProgramFiles\Orbis Package Root\`: `orbis.cfg`, `defaults\pref\autoconfig.js` and
+- `VFS\ProgramFiles\Orbis Browser Package Root\`: `orbis.cfg`, `defaults\pref\autoconfig.js` and
   `distribution\policies.json`, byte-identical to `orbis-dist`; the `distribution` folder has only
   `policies.json`; no `distribution.ini` anywhere in the package; no file with `mozilla-MSIX`.
 
@@ -154,8 +176,8 @@ that asks for another user's password), it runs as that account, not as Shibi. P
 (`Get-AppxPackage` without `-AllUsers`, `%USERPROFILE%`, `%APPDATA%`) then see that account's packages and
 folders. Use full paths, and `-AllUsers` where given below.
 
-1. **Store private audience (no change to the PC now; second step).** Shibi reserves the name, the three
-   TODO-STORE values are filled in, the package is built with `-RequireStoreIdentity`, the unsigned `.msix` is
+1. **Store private audience (no change to the PC now; second step).** Shibi reserved the name and the three
+   identity values are in the config; the package is built with `-RequireStoreIdentity`, the unsigned `.msix` is
    uploaded, and Partner Center signs it. Install it from a private audience (or a hidden listing). Slowest, but
    tests exactly what users get.
 2. **Self-signed test certificate. Do not use.** Reasons:
@@ -188,7 +210,7 @@ folders. Use full paths, and `-AllUsers` where given below.
    - Turn on Developer Mode (Settings > System > For developers). It is a **machine-wide** setting and stays on,
      for every account, until it is switched off again.
    - `Add-AppxPackage -Register <copy>\AppxManifest.xml`.
-   - **Unregister before rebuilding or replacing the copy:** `Get-AppxPackage -Name 'TODO-STORE.Orbis' |
+   - **Unregister before rebuilding or replacing the copy:** `Get-AppxPackage -Name 'shibicb72.OrbisBrowser' |
      Remove-AppxPackage`, then rebuild, copy again and register again.
    - It runs a full-trust app (`runFullTrust`) from a user-writable folder: any program running as the user can
      change its files, and no signature protects files registered from a folder. A Store install lives in the
@@ -202,14 +224,14 @@ folders. Use full paths, and `-AllUsers` where given below.
    file. It compares the SHA-256 immediately before installing, so a stale or wrong file is not installed:
 
    ```
-   $f = '<full path>\TODO-STORE.Orbis_160.0.0.0_x64_unsigned-test.msix'; if ((Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash -eq '<SHA-256 from the .sha256 file>') { Add-AppxPackage -Path $f -AllowUnsigned } else { 'SHA-256 mismatch: not installed' }
+   $f = '<full path>\shibicb72.OrbisBrowser_160.0.0.0_x64_unsigned-test.msix'; if ((Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash -eq '<SHA-256 from the .sha256 file>') { Add-AppxPackage -Path $f -AllowUnsigned } else { 'SHA-256 mismatch: not installed' }
    ```
 
    Close the elevated window right after. No certificate and no Developer Mode. Never upload this variant.
 
    - **Installed for all users.** Microsoft's documentation says an unsigned package with executable content
      must be installed for all users, so a per-user removal is not enough. **Undo needs elevation too**, in an
-     elevated PowerShell: `Get-AppxPackage -AllUsers -Name 'TODO-STORE.Orbis' | Remove-AppxPackage -AllUsers`.
+     elevated PowerShell: `Get-AppxPackage -AllUsers -Name 'shibicb72.OrbisBrowser' | Remove-AppxPackage -AllUsers`.
    - **Test-only identity.** Its publisher (with the unsigned OID) differs from the Store package's, so its
      package family differs too. Its data folder (`%LOCALAPPDATA%\Packages\<package family>`) and its
      default-app registrations (protocols, file types) belong to this test package only: nothing carries over
@@ -235,5 +257,5 @@ folders. Use full paths, and `-AllUsers` where given below.
 - **Store checks not run:** Windows App Certification Kit and Partner Center's package validation. Submission
   text, blockers and risks: `docs/STORE-SUBMISSION.md`.
 - **`mach package` still leaves out `orbis-dist`** (option B in `docs/BUILD.md`); this script works around it.
-- **Store identity names that do not end in `.Orbis`** would need `repackage_msix()` called with its `identity`
+- **Store identity names that do not end in `.OrbisBrowser`** (the Store name without spaces) would need `repackage_msix()` called with its `identity`
   argument, which `mach repackage msix` does not expose.

@@ -17,14 +17,16 @@
 ## https://mozilla-l10n.github.io/styleguides/mozilla_general/#brands-copyright-and-trademark
 
 ## Orbis: every brand term below names Orbis, never Firefox or Mozilla (docs/BRANDING.md).
+## -brand-full-name is the Microsoft Store name "Orbis Browser". It must equal brandFullName in
+## brand.properties, which becomes the MSIX DisplayName. The other terms stay "Orbis".
 ## Strings elsewhere in Firefox that hard-code "Firefox" or "Mozilla" are audited in PR 9.
 
 -brand-shorter-name = Orbis
 -brand-short-name = Orbis
 -brand-shortcut-name = Orbis
--brand-full-name = Orbis
+-brand-full-name = Orbis Browser
 # This brand name can be used in messages where the product name needs to
 # remain unchanged across different versions (Nightly, Beta, etc.).
 -brand-product-name = Orbis
 -vendor-short-name = Orbis
-trademarkInfo = Orbis is based on Mozilla's Firefox source code and is not made or endorsed by Mozilla. Firefox and Mozilla are trademarks of the Mozilla Foundation.
+trademarkInfo = Orbis Browser is based on Mozilla's Firefox source code and is not made or endorsed by Mozilla. Firefox and Mozilla are trademarks of the Mozilla Foundation.

@@ -9,6 +9,10 @@ Makes an unsigned Orbis MSIX from the packaged build with mach repackage msix, t
 .DESCRIPTION
 Option A of docs\BUILD.md: the input is a folder, not the zip, so that Orbis's policy files are in the package.
 
+0. Checks the config against the branding (also alone, with -ConfigOnly): identityName is
+   <vendor>.<displayName without spaces> (mach's form), identityName and publisher give the config's
+   packageFamilyName, and brandFullName (brand.properties) and -brand-full-name (brand.ftl) equal displayName,
+   the name reserved in Partner Center.
 1. Checks: every path on drive C: and outside this repository; the Firefox checkout has patch 0004 applied (the
    MSIX template's Mozilla distribution.ini is gone); the build's zip and the checkout's orbis-dist exist.
 2. Stages a new folder: the zip's orbis\ folder plus orbis-dist (orbis.cfg, defaults\pref\autoconfig.js,
@@ -69,6 +73,11 @@ the default work folder is msix-work-unsigned-test.
 Refuse (exit 1) while identityName, publisher or publisherDisplayName still holds a TODO-STORE placeholder.
 Use it for every build meant for upload.
 
+.PARAMETER ConfigOnly
+Check only packaging\msix-config.json and the branding in this repository, then stop: the identity form, the
+package family name computed from identityName and publisher, and brandFullName / -brand-full-name equal to
+displayName. Needs no build, no checkout and no Windows SDK.
+
 .EXAMPLE
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1
 #>
@@ -81,7 +90,8 @@ param(
     [string]$Config = '',
     [switch]$CheckOnly,
     [switch]$AllowUnsignedInstall,
-    [switch]$RequireStoreIdentity
+    [switch]$RequireStoreIdentity,
+    [switch]$ConfigOnly
 )
 
 Set-StrictMode -Version 2.0
@@ -161,6 +171,35 @@ function Find-MakeAppx {
     throw 'makeappx.exe not found (Windows SDK from mach bootstrap or Windows Kits)'
 }
 
+function Get-PackageFamilyName {
+    # <Name>_<publisher id>: the publisher id is the first 8 bytes of SHA-256 over the UTF-16LE Publisher
+    # string, written as 13 characters of Crockford's base32 in lower case (Windows' own algorithm).
+    param([string]$Name, [string]$Publisher)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $h = $sha.ComputeHash([System.Text.Encoding]::Unicode.GetBytes($Publisher))
+    $bits = (($h[0..7] | ForEach-Object { [Convert]::ToString($_, 2).PadLeft(8, '0') }) -join '') + '0'
+    $alphabet = '0123456789abcdefghjkmnpqrstvwxyz'
+    $id = ''
+    for ($i = 0; $i -lt 65; $i += 5) { $id += $alphabet[[Convert]::ToInt32($bits.Substring($i, 5), 2)] }
+    return "{0}_{1}" -f $Name, $id
+}
+
+function Get-BrandFullName {
+    # brandFullName from brand.properties and -brand-full-name from brand.ftl; each must be defined once.
+    param([string]$BrandingDir)
+    $result = @{}
+    $files = @{ 'brand.properties' = '^\s*brandFullName\s*=(.*)$'; 'brand.ftl' = '^\s*-brand-full-name\s*=(.*)$' }
+    foreach ($f in $files.Keys) {
+        $p = Join-Path $BrandingDir ('locales\en-US\' + $f)
+        if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "'$p' not found" }
+        $lines = @(Get-Content -LiteralPath $p -Encoding UTF8 | Where-Object { $_ -match $files[$f] })
+        if ($lines.Count -ne 1) { throw "'$p' must define the full brand name exactly once, found $($lines.Count)" }
+        [void]($lines[0] -match $files[$f])
+        $result[$f] = $Matches[1].Trim()
+    }
+    return $result
+}
+
 function Get-MsixVersion {
     # Firefox X.Y[.Z] and Orbis revision R (0-99) -> X.Y.(Z*100+R).0. The last part stays 0 (Store rule).
     param([string]$AppVersion, [int]$Revision)
@@ -180,11 +219,12 @@ function Get-MsixVersion {
 try {
     # --- Config ------------------------------------------------------------------------------------
     $cfg = Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json
-    foreach ($k in 'identityName', 'publisher', 'publisherDisplayName', 'displayName', 'channel', 'arch',
-                   'orbisRevision', 'capabilities', 'assets') {
-        if ($null -eq $cfg.$k) { throw "$Config has no '$k'" }
+    foreach ($k in 'identityName', 'publisher', 'publisherDisplayName', 'packageFamilyName', 'displayName',
+                   'branding', 'channel', 'arch', 'orbisRevision', 'capabilities', 'assets') {
+        if ($null -eq $cfg.PSObject.Properties[$k] -or $null -eq $cfg.$k) { throw "$Config has no '$k'" }
     }
-    $placeholders = @('identityName', 'publisher', 'publisherDisplayName' | Where-Object { $cfg.$_ -match 'TODO' })
+    $placeholders = @('identityName', 'publisher', 'publisherDisplayName', 'packageFamilyName' |
+        Where-Object { $cfg.$_ -match 'TODO' })
     if ($placeholders.Count -gt 0) {
         $list = ($placeholders | ForEach-Object { "$_='$($cfg.$_)'" }) -join ', '
         if ($RequireStoreIdentity) {
@@ -210,9 +250,33 @@ try {
     if ($cfg.identityName -notmatch '^[-.A-Za-z0-9]{3,50}$') {
         throw "identityName '$($cfg.identityName)' is not a valid package name ([-.A-Za-z0-9], 3 to 50 characters)"
     }
+    if ($placeholders.Count -eq 0) {
+        # Real Partner Center values: the family name Windows derives from Name and Publisher must be the one
+        # Partner Center shows. This catches a mistyped publisher, which nothing else would notice before upload.
+        $pfn = Get-PackageFamilyName $cfg.identityName $cfg.publisher
+        if ($pfn -cne $cfg.packageFamilyName) {
+            throw ("identityName and publisher give the package family name '{0}', but the config says '{1}' " +
+                   "(Partner Center, Product identity): one of the three values is mistyped") -f $pfn, $cfg.packageFamilyName
+        }
+        Write-Host "Package family name: $pfn (matches the config)"
+    }
     if ($cfg.arch -ne 'x86_64') { throw "only arch x86_64 is built (config says '$($cfg.arch)')" }
     $assetsDir = Join-Path $repoRoot ($cfg.assets -replace '/', '\')
     if (-not (Test-Path -LiteralPath $assetsDir -PathType Container)) { throw "assets folder '$assetsDir' not found" }
+    # mach takes Package/Properties/DisplayName from brandFullName in the build's brand.properties, not from the
+    # config. Both full-name strings of the branding must equal the Store name in displayName.
+    $brandNames = Get-BrandFullName (Join-Path $repoRoot ($cfg.branding -replace '/', '\'))
+    foreach ($f in $brandNames.Keys) {
+        if ($brandNames[$f] -cne $cfg.displayName) {
+            throw "$($cfg.branding)/locales/en-US/$f says full name '$($brandNames[$f])', config displayName is '$($cfg.displayName)'"
+        }
+    }
+    Write-Host "Branding full name: $($cfg.displayName) (brand.properties and brand.ftl)"
+    if ($ConfigOnly) {
+        Write-Host ("OK: config and branding checked; identity {0} (mach --vendor '{1}' --identity-name '{2}')" -f
+                    $cfg.identityName, $vendor, $cfg.displayName)
+        exit 0
+    }
 
     # --- Paths -------------------------------------------------------------------------------------
     $co = Get-FullPathOnC $Checkout 'the checkout'
@@ -346,10 +410,15 @@ try {
     $want = @{ 'Identity Name' = $cfg.identityName; 'Identity Publisher' = $wantPublisher
                'Identity Version' = $version; 'ProcessorArchitecture' = 'x64'
                'DisplayName' = $cfg.displayName; 'PublisherDisplayName' = $cfg.publisherDisplayName
-               'VisualElements DisplayName' = $cfg.displayName
+               'Description' = $cfg.displayName; 'VisualElements DisplayName' = $cfg.displayName
                'Capabilities' = (@($cfg.capabilities) -join ', ') }
     foreach ($k in $want.Keys) {
         if ($seen[$k] -cne $want[$k]) { Add-Failure "manifest $k is '$($seen[$k])', config wants '$($want[$k])'" }
+    }
+    if (-not $AllowUnsignedInstall -and $placeholders.Count -eq 0) {
+        $mfPfn = Get-PackageFamilyName $seen['Identity Name'] $seen['Identity Publisher']
+        Write-Host "  Package family name: $mfPfn"
+        if ($mfPfn -cne $cfg.packageFamilyName) { Add-Failure "package family name is '$mfPfn', config wants '$($cfg.packageFamilyName)'" }
     }
     $instRel = 'VFS\ProgramFiles\' + $cfg.displayName + ' Package Root'
     if ($seen['Application Executable'] -ne ($instRel + '\orbis.exe')) {

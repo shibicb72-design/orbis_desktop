@@ -824,6 +824,8 @@ def ui_checks(m, root_pid):
         out["brand"] = m.execute_script("""
           const b = Services.strings.createBundle('chrome://branding/locale/brand.properties');
           return {short: b.GetStringFromName('brandShortName'), full: b.GetStringFromName('brandFullName')};""")
+        # docs/BRANDING.md, "Names": the full name is the Store name, the short name stays "Orbis".
+        out["brandAsExpected"] = out["brand"] == {"short": "Orbis", "full": "Orbis Browser"}
         out["win32TitlesMain"] = win_titles(root_pid)
         with open(os.path.join(OUT, "g-main-window.png"), "wb") as f:
             f.write(m.screenshot(format="binary"))
