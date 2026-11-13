@@ -65,6 +65,30 @@ export MACH_HIDE_DEV_DRIVE_SUGGESTION=1
 The first build took 47 minutes (2848 s) and ended with exit code 0. The full log is under
 `obj-orbis\.mozbuild\logs\build\`; search it, do not read it whole.
 
+### Incremental builds and icons
+
+An incremental `mach build` does **not** pick up changed `.ico` files. The executables' icons come from
+resource scripts generated in the objdir (`browser\app\orbis.exe.rc`, `browser\app\pbproxy\private_browsing.exe.rc`,
+`browser\app\desktop-launcher\desktop-launcher.exe.rc`), and the build does not record the `.ico` files from
+`browser\branding\orbis` as their inputs. Seen on 2026-11-12 with main `f480cd8`: after the Orbit art replaced
+the placeholders, an incremental build (126 s, exit code 0) relinked `orbis.exe` but kept the old `.res` files.
+All three executables still carried the placeholder icon, with no error or warning.
+
+After any change to an `.ico` in the branding, update the timestamps of those three files before building:
+
+```
+$app = "$env:USERPROFILE\orbis_desktop_src\obj-orbis\browser\app"
+foreach ($f in "$app\orbis.exe.rc", "$app\pbproxy\private_browsing.exe.rc", "$app\desktop-launcher\desktop-launcher.exe.rc") {
+    (Get-Item $f).LastWriteTime = Get-Date }
+```
+
+The next build (60 s that day) rebuilt the three `.res` files, and `llvm-rc` accepted the Orbit `.ico` files (32-bit
+BMP entries below 256 px, PNG at 256 px). To check: every image of `firefox.ico` (and `pbmode.ico`,
+`document.ico`, `document_pdf.ico`, `newtab.ico`, `newwindow.ico` for `orbis.exe`; `pbmode.ico` for
+`private_browsing.exe`; `firefox.ico` for `desktop-launcher.exe`) appears byte for byte in the built
+executable. Files that the build copies, such as the About dialog logo in `omni.ja` and the MSIX `Assets`, are
+updated by an incremental build. The NSIS `wiz*.bmp` files are not built (no installer is shipped).
+
 ## 3. Package
 
 Same shell setup, with `package.sh`:

@@ -213,8 +213,11 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   not set. Extensions see the same values through `runtime.getBrowserInfo()`. Changing them would change the
   user agent and the search configuration (rule 4) and needs a patch; `about:support` is a troubleshooting page,
   not a product name. Revisit only if the Store review objects.
-- **Real artwork: done ("Orbit", `branding/orbis/source/`).** To check in the next build: the icons in the
-  taskbar, Start and the About dialog, at 100% and 150% display scaling.
+- **Real artwork: done ("Orbit", `branding/orbis/source/`).** Checked in the build of main `f480cd8`
+  (2026-11-12): the About dialog logo, the first-run screen and the tab icon (`verify-build.py ui`); the icons in
+  `orbis.exe`, `private_browsing.exe` and `desktop-launcher.exe`; and all 11 MSIX `Assets\`. Not checked
+  until the MSIX is installed: the icons in the taskbar and Start, at 100% and 150% display scaling. An
+  incremental build needs a step to pick up new icons (`docs/BUILD.md`, "Incremental builds and icons").
 - **Strings outside the branding folder (PR 9).** Some Firefox pages name Mozilla or Firefox directly, for example
   `browser/base/content/overrides/app-license.html` ("made available to you by the Mozilla Project"). Audit them
   and override or patch the ones a user sees. `-vendor-short-name` is now "Orbis", so check every string that uses
@@ -235,14 +238,16 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   the tiles; Windows may still use it behind the plated `Square44x44Logo.scale-200.png` (transparent corners).
   Changing it needs a patch to the template; teal `#216969` would match.
 - **Icon entries.** The `.ico` files store 32-bit BMP images below 256 px and a PNG image at 256 px (the
-  placeholders were PNG only). The resource compiler accepting them: to check in the next build.
+  placeholders were PNG only). `llvm-rc` accepts them: checked in the build of main `f480cd8`, where every
+  image of each `.ico` is in the built executables.
 - **The name.** "Orbis Browser" is reserved in the Microsoft Store (Store ID `9N9C8WTZRJ3P`). "Orbis" or
   "Orbis Browser" as a trademark: not checked.
 - **Names: checked in the build of 2026-11-12.** `scripts/verify-build.py ui`: window title "Welcome to Orbis —
   Orbis Browser", About dialog title "About Orbis Browser", `brandAsExpected` true (short "Orbis", full "Orbis
   Browser"), and the `trademarkInfo` line "Orbis Browser is based on Mozilla's Firefox source code ...". MSIX
   `DisplayName` and `Description` "Orbis Browser" (`make-msix.ps1`).
-- **About dialog text: reworded (Shibi, 2026-11-12), to check in the next build.** Patch 0003's
+- **About dialog text: reworded (Shibi, 2026-11-12), checked in the build of main `f480cd8`**
+  (`aboutDescriptionAsExpected` true; the only visible link is `about:license`). Patch 0003's
   `orbis-about-description` said "... and comes with uBlock Origin.", which predated the consent screen. It now
   says "Orbis is an independent browser that puts privacy first: it blocks trackers by default and offers uBlock
   Origin at first run." A checkout with the old 0003 needs the undo and re-apply steps in `docs/PATCHES.md`
