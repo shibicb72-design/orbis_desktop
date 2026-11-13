@@ -1,0 +1,9 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- Orbis jump-list icon "New tab": a teal tab with a cream plus. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <path d="M8 236H248" stroke="#9AD3CF" stroke-width="24" stroke-linecap="round"/>
+  <path d="M40 236V72Q40 28 84 28H172Q216 28 216 72V236Z" fill="#216969"/>
+  <path d="M128 76V188M72 132H184" stroke="#F4F7F7" stroke-width="32" stroke-linecap="round"/>
+</svg>

@@ -56,7 +56,8 @@ Items marked "planned" do not exist yet.
   outside the checkout, through a junction, or tracked by Firefox's git, and refuses everything until
   `browser/moz.configure` sets `MOZ_APP_PROFILE` (patch 0001: the profile build blocker). It does not apply
   `patches/`.
-- `scripts/make-placeholder-branding.ps1`: redraws the TODO placeholder images.
+- `scripts/make-branding.py` + `branding/orbis/source/*.svg`: draws every branding image (the "Orbit" icon) with
+  headless Edge and Pillow. Run with `python`, not `python -I` (Pillow is a per-user install).
 - `overlay/distribution/policies.json`: enterprise policies (feature switches, uBlock Origin allowed and its
   enforced filter lists, search engines).
 - `overlay/orbis.cfg` + `overlay/defaults/pref/autoconfig.js`: locked and default prefs that no policy covers,
@@ -64,7 +65,7 @@ Items marked "planned" do not exist yet.
   `orbis.cfg` runs in AutoConfig's sandbox: pref functions only, and its first line is skipped by Firefox.
 - `scripts/check-settings.py`: fails on unknown pref names, wrong pref types, invalid policies (checked against the
   pinned source's `policies-schema.json`) and settings missing from `docs/SETTINGS.md`.
-- `overlay/browser/branding/orbis/`: short name "Orbis", full name "Orbis Browser" (the Store name); icons and Store tiles are TODO placeholders. See
+- `overlay/browser/branding/orbis/`: short name "Orbis", full name "Orbis Browser" (the Store name); icons and Store tiles are the "Orbit" artwork (MPL-2.0). See
   `docs/BRANDING.md` for the trademark rules.
 - `mozconfig`: Windows x64 release build options. `scripts/check-mozconfig.py` checks them against the source.
 - `docs/BUILD.md`: build, package and check steps of the first build, and the packaging gap (`mach package` leaves
