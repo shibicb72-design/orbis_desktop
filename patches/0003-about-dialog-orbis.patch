@@ -128,7 +128,7 @@ index 6effd77..9ec8216 100644
        <description id="trademark" data-l10n-id="trademarkInfo"></description>
      </vbox>
 diff --git a/browser/locales/en-US/browser/aboutDialog.ftl b/browser/locales/en-US/browser/aboutDialog.ftl
-index 1b30273..ecf9e7d 100644
+index 1b30273..b3645a0 100644
 --- a/browser/locales/en-US/browser/aboutDialog.ftl
 +++ b/browser/locales/en-US/browser/aboutDialog.ftl
 @@ -76,17 +76,10 @@ warningDesc-version = { -brand-short-name } is experimental and may be unstable.
@@ -143,7 +143,7 @@ index 1b30273..ecf9e7d 100644
 -
 -helpus-referrals2 = Want to help? <label data-l10n-name="helpus-donateLink">Make a donation</label>, <label data-l10n-name="helpus-shareFirefoxLink">share { -brand-product-name }</label>, or <label data-l10n-name="helpus-getInvolvedLink">get involved!</label>
 +# Orbis: replaces community-2 and community-exp. The attribution to Mozilla is trademarkInfo in brand.ftl.
-+orbis-about-description = { -brand-short-name } is an independent browser that puts privacy first: it blocks trackers by default and comes with uBlock Origin.
++orbis-about-description = { -brand-short-name } is an independent browser that puts privacy first: it blocks trackers by default and offers uBlock Origin at first run.
  
  bottomLinks-license = Licensing Information
 -bottom-links-terms = Terms of Use

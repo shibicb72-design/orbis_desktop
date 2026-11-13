@@ -205,5 +205,8 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   Orbis Browser", About dialog title "About Orbis Browser", `brandAsExpected` true (short "Orbis", full "Orbis
   Browser"), and the `trademarkInfo` line "Orbis Browser is based on Mozilla's Firefox source code ...". MSIX
   `DisplayName` and `Description` "Orbis Browser" (`make-msix.ps1`).
-- **About dialog says "comes with uBlock Origin".** Patch 0003's `orbis-about-description` predates the consent
-  screen: uBlock Origin is now offered at first run, not included. To reword with Shibi.
+- **About dialog text: reworded (Shibi, 2026-11-12), to check in the next build.** Patch 0003's
+  `orbis-about-description` said "... and comes with uBlock Origin.", which predated the consent screen. It now
+  says "Orbis is an independent browser that puts privacy first: it blocks trackers by default and offers uBlock
+  Origin at first run." A checkout with the old 0003 needs the undo and re-apply steps in `docs/PATCHES.md`
+  ("How to apply") and a rebuild; `verify-build.py ui` checks the text (`aboutDescriptionAsExpected`).

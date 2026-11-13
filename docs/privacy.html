@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Orbis Browser for Windows: Privacy Policy</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.6;
+         max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #1f1f1f; background: #fff; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  .date { color: #555; margin-top: 0; }
+  code { background: #f2f2f2; padding: 0 0.25rem; border-radius: 3px; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e6e6; background: #121212; }
+    .date { color: #aaa; }
+    code { background: #2a2a2a; }
+    a { color: #8ab4f8; }
+  }
+</style>
+</head>
+<body>
+<h1>Orbis Browser for Windows: Privacy Policy</h1>
+<p class="date">Effective date: November 12, 2026. App: Orbis Browser for Windows, from the Microsoft Store
+(Store ID <code>9N9C8WTZRJ3P</code>).</p>
+
+<h2>Summary</h2>
+<p>Orbis Browser is a web browser for Windows. It is based on Mozilla's Firefox source code and is not made or
+endorsed by Mozilla. The developer of Orbis receives no data about you or your browsing.</p>
+<ul>
+  <li>There is no account, sign-in or sync.</li>
+  <li>There is no telemetry, no analytics, no studies and no crash reporting.</li>
+  <li>There are no Orbis servers. Orbis sends nothing to the developer.</li>
+  <li>Your browsing data stays on your PC.</li>
+</ul>
+
+<h2>What stays on your PC</h2>
+<p>Your browsing data, such as history, bookmarks, cookies, saved passwords and settings, is stored only in your
+Orbis profile on your PC. Orbis has no account or sync, so it does not copy this data anywhere. The developer holds
+no copy.</p>
+
+<h2>Private browsing</h2>
+<p>In private windows, what you type in the address bar is not sent for search suggestions. HTTPS-only mode, tracking
+protection and the isolation of third-party cookies per site also apply in private windows, and uBlock Origin, if you
+installed it, works in them too.</p>
+
+<h2>First run: uBlock Origin</h2>
+<p>When you start Orbis for the first time, one screen offers the uBlock Origin content blocker, with the box
+"Install uBlock Origin ad blocker" checked. uBlock Origin is a separate project (GPL-3.0). It is not made or endorsed
+by Orbis or Mozilla, and it is not included in Orbis.</p>
+<ul>
+  <li>If you click Continue with the box checked and accept the browser's "Add uBlock Origin?" prompt, Orbis
+      downloads uBlock Origin from addons.mozilla.org.</li>
+  <li>If you uncheck the box, nothing is downloaded or installed.</li>
+  <li>If you close the screen without an answer, or uBlock Origin is not installed (for example, you cancel the
+      prompt), the screen is shown again at the next start. It is not shown again after you decline or after uBlock
+      Origin is installed.</li>
+</ul>
+
+<h2>What leaves your PC, and when</h2>
+<p>Orbis contacts the services below. Each of them sees your IP address and the request it receives. Their own
+privacy policies apply.</p>
+<ul>
+  <li><strong>Websites you visit</strong> receive what any browser sends them, such as your IP address, the page
+      request and the cookies they set. Orbis starts with Enhanced Tracking Protection set to Strict and with
+      HTTPS-only mode on. You can change both.</li>
+  <li><strong>Search</strong> goes to the search engine you choose. DuckDuckGo is the default.</li>
+  <li><strong>Search suggestions</strong> (on by default, never in private windows; you can turn them off): with
+      DuckDuckGo, what you type in the address bar is sent to duckduckgo.com as you type.</li>
+  <li><strong>Mozilla Remote Settings</strong> (<code>firefox.settings.services.mozilla.com</code>, with files
+      from <code>firefox-settings-attachments.cdn.mozilla.net</code> and the signing certificate from
+      <code>content-signature-2.cdn.mozilla.net</code>): at start and when new data is announced. It delivers
+      security data, such as certificate revocation lists, the add-on blocklist and tracking-protection lists.
+      Orbis checks the signature of this data before it uses it.</li>
+  <li><strong>Mozilla's push service</strong> (<code>push.services.mozilla.com</code>): a connection opened at every
+      start and kept open. It tells Orbis at once when new security data is available, and it delivers
+      notifications from websites that you allow to send them. The connection carries an ID for your Orbis profile,
+      which lets Mozilla's push server recognise the same profile across starts.</li>
+  <li><strong>Media plugins</strong> (<code>aus5.mozilla.org</code>): about once a day, Orbis downloads Mozilla's
+      list of media plugins. The OpenH264 video codec, which video calls on the web (WebRTC) need, is downloaded from
+      Cisco (<code>ciscobinary.openh264.org</code>) once and when it is updated. The Widevine DRM plugin is
+      downloaded only if you turn DRM on; it is off by default.</li>
+  <li><strong>addons.mozilla.org</strong>: only if you accept uBlock Origin on the first-run screen, or install an
+      add-on later. Orbis then downloads the add-on there and checks
+      <code>versioncheck-bg.addons.mozilla.org</code> for its updates about once a day.</li>
+  <li><strong>uBlock Origin's filter lists</strong> (only with uBlock Origin installed): uBlock Origin itself
+      downloads its filter lists right after the install and then on its own update schedule, from their publishers
+      and mirrors: <code>ublockorigin.github.io</code>, <code>ublockorigin.pages.dev</code>,
+      <code>cdn.jsdelivr.net</code>, <code>raw.githubusercontent.com</code>, <code>secure.fanboy.co.nz</code>,
+      <code>malware-filter.gitlab.io</code>, <code>curbengh.github.io</code>, <code>phishing-filter.pages.dev</code>
+      and <code>pgl.yoyo.org</code>, and the public suffix list from <code>publicsuffix.org</code>. Orbis chooses
+      which lists are on.</li>
+  <li><strong>Certificate authorities (OCSP)</strong>: when a website's certificate needs a revocation check that
+      the lists on your PC cannot answer, Orbis asks the authority that issued it. This tells that authority which
+      website's certificate is checked.</li>
+  <li><strong>Page translation</strong> runs on your PC. When you translate a page into a new language pair, the
+      language model is downloaded once from Mozilla.</li>
+  <li><strong>Location</strong>: only when a website asks and you allow it. Orbis then uses the Windows location
+      service, not Google's.</li>
+  <li><strong>Updates</strong> come only from the Microsoft Store. Orbis has no updater of its own.</li>
+</ul>
+
+<h2>No Google Safe Browsing</h2>
+<p>Orbis does not use Google Safe Browsing, so it does not send website or download information to Google for
+phishing and malware checks. Protection against phishing and malware sites comes from uBlock Origin's filter lists.
+If you do not install uBlock Origin, Orbis has no phishing or malware site protection. The first-run screen says this
+before you decline.</p>
+
+<h2>Turned off</h2>
+<p>Orbis turns off Firefox's telemetry, studies and experiments, crash reports, Mozilla accounts and sync,
+sponsored content and recommendations, the location lookup that guesses your country, Mozilla's DNS over HTTPS
+rollout, and the AI chatbot. The connectivity and Wi-Fi login page checks are off by default; you can turn them
+on.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version will be posted on this page with a new effective date.</p>
+
+<h2>Contact</h2>
+<p>Questions: open an issue at
+<a href="https://github.com/shibicb72-design/orbis_desktop/issues">github.com/shibicb72-design/orbis_desktop/issues</a>.
+Issues are public, so do not include personal information.</p>
+</body>
+</html>
