@@ -201,7 +201,9 @@ reuse, so none of it is used. Mac-only files (`Assets.car`, `*.icns`, `dsstore`)
   That the build's resource compiler accepts them is unverified until the first build.
 - **The name.** "Orbis Browser" is reserved in the Microsoft Store (Store ID `9N9C8WTZRJ3P`). "Orbis" or
   "Orbis Browser" as a trademark: not checked.
-- **Next build: check the names.** The first build said "Orbis" as the full name. After the next build, check
-  the window title ("— Orbis Browser"), "About Orbis Browser" and the `trademarkInfo` line
-  (`scripts/verify-build.py ui` reports them), and the MSIX `DisplayName` (`make-msix.ps1` fails if it is not
-  "Orbis Browser").
+- **Names: checked in the build of 2026-11-12.** `scripts/verify-build.py ui`: window title "Welcome to Orbis —
+  Orbis Browser", About dialog title "About Orbis Browser", `brandAsExpected` true (short "Orbis", full "Orbis
+  Browser"), and the `trademarkInfo` line "Orbis Browser is based on Mozilla's Firefox source code ...". MSIX
+  `DisplayName` and `Description` "Orbis Browser" (`make-msix.ps1`).
+- **About dialog says "comes with uBlock Origin".** Patch 0003's `orbis-about-description` predates the consent
+  screen: uBlock Origin is now offered at first run, not included. To reword with Shibi.

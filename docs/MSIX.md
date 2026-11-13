@@ -82,6 +82,13 @@ task `Orbis Browser`, `VFS\ProgramFiles\Orbis Browser Package Root\orbis.exe`, f
 that old build's `brand.properties`; the next build takes "Orbis Browser" from the new branding. That test
 package was deleted.
 
+First Store package, 2026-11-12, after an incremental `mach build` (133 s) and `mach package` (125 s) of main
+`7dbfebb`: `make-msix.ps1 -RequireStoreIdentity` passed every check. `DisplayName`, `Description` and the tile
+are "Orbis Browser"; identity, publisher, `PublisherDisplayName` and family name as in the table above;
+`runFullTrust` only; the three policy files byte-identical to the overlay; no `distribution.ini`; unsigned (no
+`AppxSignature.p7x`). 142,179,979 bytes, SHA-256
+`30B84C5C4944DAC8A8F7CBA962E089D38B03506AB3FCA936E1791DBD76AAC292`. Not installed, not uploaded.
+
 ### Version
 
 `Package/Identity/Version` is four numbers, each at most 65535, and the Store requires the last to be 0. mach's

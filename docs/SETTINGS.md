@@ -402,8 +402,11 @@ port 443, not matched to host names). In those 30 seconds the DNS log has only h
 `content-signature-2.cdn.mozilla.net`, `push.services.mozilla.com`, `aus5.mozilla.org`, `ciscobinary.openh264.org`,
 `addons.mozilla.org`, `versioncheck-bg.addons.mozilla.org`, `publicsuffix.org`, `ublockorigin.github.io`,
 `ublockorigin.pages.dev`, `cdn.jsdelivr.net`, `secure.fanboy.co.nz`, `malware-filter.gitlab.io` and `pgl.yoyo.org`.
-What happened after the first 30 seconds is not known yet: the next build re-runs the check with
-`MOZ_LOG=timestamp,sync,nsHostResolver:5`, which writes each line unbuffered.
+Second wire check (build of 2026-11-12, main `7dbfebb`), with `MOZ_LOG=timestamp,sync,nsHostResolver:5`: the
+DNS log now covers the whole idle run (00:21:31 to 00:24:39 UTC). Without uBlock Origin (nobody answered the
+consent screen) it has six hosts, all in this table: `firefox.settings.services.mozilla.com`,
+`firefox-settings-attachments.cdn.mozilla.net`, `content-signature-2.cdn.mozilla.net`,
+`push.services.mozilla.com`, `aus5.mozilla.org` and `ciscobinary.openh264.org`. No `addons.mozilla.org` lookup.
 
 Already off (above): telemetry, Normandy, Nimbus, DAP, crash reports; region lookup; captive-portal and connectivity
 checks; Mozilla's DoH rollout; sponsored content and Contile; Google Safe Browsing and Widevine via Google; system

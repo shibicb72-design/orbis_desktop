@@ -64,7 +64,7 @@ Items marked "planned" do not exist yet.
   `orbis.cfg` runs in AutoConfig's sandbox: pref functions only, and its first line is skipped by Firefox.
 - `scripts/check-settings.py`: fails on unknown pref names, wrong pref types, invalid policies (checked against the
   pinned source's `policies-schema.json`) and settings missing from `docs/SETTINGS.md`.
-- `overlay/browser/branding/orbis/`: name "Orbis"; icons and Store tiles are TODO placeholders. See
+- `overlay/browser/branding/orbis/`: short name "Orbis", full name "Orbis Browser" (the Store name); icons and Store tiles are TODO placeholders. See
   `docs/BRANDING.md` for the trademark rules.
 - `mozconfig`: Windows x64 release build options. `scripts/check-mozconfig.py` checks them against the source.
 - `docs/BUILD.md`: build, package and check steps of the first build, and the packaging gap (`mach package` leaves
@@ -73,8 +73,9 @@ Items marked "planned" do not exist yet.
   Origin consent screen accepted and declined, idle DNS lookups, About dialog). Needs a build and the Firefox checkout's Marionette client.
 - `scripts/make-msix.ps1` + `packaging/msix-config.json`: unsigned MSIX from the packaged build with
   `mach repackage msix` (zip plus `orbis-dist`), then `makeappx unpack` checks of the manifest, assets and policy
-  files. Store identity values are `TODO-STORE` placeholders (loud warning; `-RequireStoreIdentity` refuses
-  them). Never signs or installs. See `docs/MSIX.md`.
+  files. Holds the real Partner Center identity (`shibicb72.OrbisBrowser`, family name
+  `shibicb72.OrbisBrowser_bcchdm3mrcmtt`); build every upload with `-RequireStoreIdentity`, which refuses any
+  `TODO-STORE` placeholder. Never signs or installs. See `docs/MSIX.md`.
 - `docs/STORE-SUBMISSION.md`: Partner Center text (`runFullTrust` justification, certification notes), Store
   blockers, policy 10.2.1 engine currency, and policy risks.
 - `docs/SETTINGS.md`: one row per setting: value, locked or default, reason, Firefox source; differences from
