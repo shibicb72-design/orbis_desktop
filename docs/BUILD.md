@@ -144,10 +144,10 @@ About dialog shows these two values, so an MSIX would say "mozilla-MSIX - 1.0" t
 ## 3b. MSIX
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make-msix.ps1 -RequireStoreIdentity
 ```
 
-Unsigned `.msix` in `%USERPROFILE%\orbis_desktop_src\msix\`; values and checks in `docs/MSIX.md`. About 30 seconds.
+`-RequireStoreIdentity` for every package meant for upload. Unsigned `.msix` in `%USERPROFILE%\orbis_desktop_src\msix\`; values and checks in `docs/MSIX.md`. About 30 seconds.
 
 ## 5. Check the build
 
@@ -205,7 +205,10 @@ The script's header lists every output file. What to compare:
   `consent-<choice>-screen.png` shows the screen. The accept run also runs the `idle` checks
   (`checks-consent-accept.json`). The test accepts Firefox's "Add uBlock Origin?" prompt itself; it runs headless,
   so look at the screen once in a real window too.
-- `second`: on the accepted profile, `selectedFilterLists` still matches the `3rdparty` policy.
+- `second`: on the accepted profile, `selectedFilterLists` still matches the `3rdparty` policy. **Does not work
+  on the `consent accept` profile any more:** that phase removes uBlock Origin again (`uboRemoved`), so `second`
+  prints `ubo` and `selectedFilterLists` null and still exits 0 (seen in the build of 2026-11-12). Until a phase
+  keeps uBlock Origin installed, the re-applied lists at a later start are not checked.
 - `hosts`: every host is in `docs/SETTINGS.md`, "Network calls that remain". A new host must be added there with a
   reason, or blocked, before release. The idle phase logs with `MOZ_LOG=timestamp,sync,nsHostResolver:5`: without
   `sync`, the first build's DNS log lost everything after the first 30 seconds when the release build shut down.

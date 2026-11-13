@@ -64,8 +64,8 @@ In this order:
 1. **Name reserved: done.** Shibi reserved "Orbis Browser" (not "Orbis"). The branding's full name, the
    tile name and `displayName` now say "Orbis Browser" (`docs/BRANDING.md`).
 2. **Real identity values: done.** In `packaging/msix-config.json` (table above). Build every upload with
-   `make-msix.ps1 -RequireStoreIdentity` (`docs/MSIX.md`). The next build must be a full one: the existing
-   build still has `brandFullName=Orbis`, which `make-msix.ps1` refuses as the package's DisplayName.
+   `make-msix.ps1 -RequireStoreIdentity` (`docs/MSIX.md`). The first Store package was built this way on
+   2026-11-12 (an incremental build was enough to pick up `brandFullName=Orbis Browser`); not uploaded.
 3. **Real artwork.** Every icon, tile and Store logo is a TODO placeholder (`docs/BRANDING.md`, PR 9), and the
    tile background `#20123A` is Firefox purple.
 4. **An install test that proves the policies and AutoConfig work inside the MSIX.** Nothing has been installed
